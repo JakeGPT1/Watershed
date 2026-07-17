@@ -2,8 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
+// Cron endpoints have no Supabase session — they authenticate via CRON_SECRET
+// inside the route handler itself, not via this middleware.
+const BYPASS_PATHS = ["/api/cron"];
 
 export async function middleware(request: NextRequest) {
+  if (BYPASS_PATHS.some((p) => request.nextUrl.pathname.startsWith(p))) {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
