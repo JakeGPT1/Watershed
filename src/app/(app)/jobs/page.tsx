@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail } from "./actions";
+import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail, refreshJobMatches } from "./actions";
 import { CopyButton } from "./_components/CopyButton";
 
 export default async function JobsPage() {
@@ -93,6 +93,11 @@ export default async function JobsPage() {
                   <form action={winOpportunity.bind(null, job.id)}>
                     <button className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">
                       Win → Create Project
+                    </button>
+                  </form>
+                  <form action={refreshJobMatches.bind(null, job.id)}>
+                    <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
+                      Refresh Matches
                     </button>
                   </form>
                   {job.matches.length > 0 && (

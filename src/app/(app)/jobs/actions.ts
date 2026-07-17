@@ -151,6 +151,7 @@ export async function refreshJobMatches(jobId: string) {
   await requireOwner();
   await matchCandidatesToJob(jobId);
   revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
 }
 
 /** Draft a standard (named) outreach email for a job, optionally addressed to a contact. */

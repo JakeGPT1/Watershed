@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "./prisma";
+import { matchCandidatesToJob } from "./matching";
 
 const openai = new OpenAI({ apiKey: process.env.EMBEDDINGS_API_KEY! });
 const MODEL = process.env.EMBEDDINGS_MODEL || "text-embedding-3-small";
@@ -41,6 +42,16 @@ export async function recomputeCandidateEmbedding(candidateId: string): Promise<
 
   const vector = JSON.stringify(await embed(text));
   await prisma.$executeRaw`update "Candidate" set embedding = ${vector}::vector where id = ${candidateId}`;
+
+  // Re-rank every live GTM opportunity now that this candidate's profile changed — cheap
+  // thanks to matchCandidatesToJob's rationale-reuse for unchanged pairs.
+  const liveOpps = await prisma.job.findMany({
+    where: { isGtmOpportunity: true },
+    select: { id: true },
+  });
+  for (const j of liveOpps) {
+    await matchCandidatesToJob(j.id).catch(console.error);
+  }
 }
 
 export async function setJobEmbedding(jobId: string, matchText: string): Promise<void> {

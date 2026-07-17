@@ -23,8 +23,26 @@ export async function matchCandidatesToJob(
 
   const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
 
+  // Prune stale matches — a candidate that fell out of the top N no longer belongs here.
+  await prisma.match.deleteMany({
+    where: { jobId, candidateId: { notIn: hits.map((h) => h.id) } },
+  });
+
+  const existingMatches = await prisma.match.findMany({ where: { jobId } });
+  const existingByCandidate = new Map(existingMatches.map((m) => [m.candidateId, m]));
+
   let written = 0;
   for (const hit of hits) {
+    const existing = existingByCandidate.get(hit.id);
+
+    // Reuse the stored rationale when the score barely moved — saves a Claude call for
+    // every unchanged pair on every re-match (candidate edits, weekly monitor runs, etc.).
+    if (existing?.rationale && Math.abs(existing.score - hit.score) < 0.02) {
+      await prisma.match.update({ where: { id: existing.id }, data: { score: hit.score } });
+      written++;
+      continue;
+    }
+
     const candidate = await prisma.candidate.findUnique({
       where: { id: hit.id },
       include: { tags: { include: { tag: true } } },
