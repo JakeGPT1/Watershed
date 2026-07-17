@@ -4,7 +4,7 @@ import { matchCandidatesToJob } from "@/lib/matching";
 import { GTM_SEED_COMPANIES } from "./companies";
 import { discoverAts } from "./discover";
 import { fetchPostings, type NormalizedPosting } from "./fetchPostings";
-import { isGtmRole, isLeadershipGtmRole, isUsLocation, GTM_US_ONLY } from "./filter";
+import { isGtmRole, isLeadershipGtmRole, isUsLocation, hasNonUsRegionMarker, GTM_US_ONLY } from "./filter";
 
 export interface MonitorRunResult {
   companiesChecked: number;
@@ -56,9 +56,14 @@ async function ensureCompaniesResolved(): Promise<string[]> {
 }
 
 function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | null {
-  const gtm = postings.filter(
-    (p) => isGtmRole(p.title, p.department) && (!GTM_US_ONLY || isUsLocation(p.location))
-  );
+  const gtm = postings.filter((p) => {
+    if (!isGtmRole(p.title, p.department)) return false;
+    if (!GTM_US_ONLY) return true;
+    // Title/department can name a non-US region even when the bare location string
+    // collides with a US place name (e.g. "Eastern Europe" role based in "Warsaw").
+    if (hasNonUsRegionMarker(p.title) || hasNonUsRegionMarker(p.department ?? "")) return false;
+    return isUsLocation(p.location);
+  });
   if (gtm.length === 0) return null;
   // Leadership hires first (strongest buying signal), then most recent.
   gtm.sort((a, b) => {
@@ -149,10 +154,14 @@ export async function runGtmMonitor(): Promise<MonitorRunResult> {
   if (GTM_US_ONLY) {
     const current = await prisma.job.findMany({
       where: { isGtmOpportunity: true },
-      select: { id: true, location: true },
+      select: { id: true, title: true, department: true, location: true },
     });
     for (const j of current) {
-      if (!isUsLocation(j.location)) {
+      const isUs =
+        !hasNonUsRegionMarker(j.title) &&
+        !hasNonUsRegionMarker(j.department ?? "") &&
+        isUsLocation(j.location);
+      if (!isUs) {
         await prisma.job.update({ where: { id: j.id }, data: { isGtmOpportunity: false } });
       }
     }
