@@ -17,7 +17,7 @@ if (error) {
 }
 
 const tokenHash = data.properties.hashed_token;
-const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const site = process.argv[2] ?? process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 console.log("\nOpen this URL in your browser to sign in:\n");
 console.log(`${site}/auth/confirm?token_hash=${tokenHash}&type=magiclink\n`);
 console.log("(Valid for one use, expires in ~1 hour.)");
