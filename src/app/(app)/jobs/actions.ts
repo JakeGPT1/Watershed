@@ -48,8 +48,15 @@ export async function winOpportunity(jobId: string) {
 }
 
 /** Server-side backstop: redact any leaked token of the candidate's real name. */
+// Sender identity — never redact, even if a candidate happens to share a name token with
+// it (e.g. a candidate literally named "Jake ..." must not blank out the email's own
+// signature "Best, Jake / Founder, Watershed").
+const PROTECTED_TOKENS = new Set(["jake", "watershed"]);
+
 function redactName(text: string, candidateName: string): string {
-  const tokens = candidateName.split(/\s+/).filter((t) => t.length >= 3);
+  const tokens = candidateName
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !PROTECTED_TOKENS.has(t.toLowerCase()));
   let result = text;
   for (const token of tokens) {
     const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
