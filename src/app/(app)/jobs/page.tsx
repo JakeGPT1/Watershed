@@ -188,6 +188,11 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                     <Link href={`/jobs/${job.id}`} className="font-medium text-stone-900 hover:underline">
                       {job.title}
                     </Link>
+                    {job.source === "website" && (
+                      <span className="ml-2 rounded-md bg-blue-50 px-1.5 py-0.5 text-xs text-blue-700">
+                        Inbound
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-stone-600">{job.company?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-stone-600">{job._count.matches}</td>

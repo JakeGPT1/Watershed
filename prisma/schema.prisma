@@ -65,6 +65,7 @@ model Contact {
 model Candidate {
   id              String                       @id @default(cuid())
   name            String
+  email           String?
   currentTitle    String?
   location        String?
   compExpect      String?
@@ -72,6 +73,7 @@ model Candidate {
   linkedinRawText String?
   resumeUrl       String?
   summary         String?
+  source          String?
   embedding       Unsupported("vector(1536)")?
   notes           Note[]
   transcripts     Transcript[]
@@ -135,6 +137,7 @@ model Job {
   sourceUrl         String?
   rawText           String
   requirements      String?
+  source            String? // "website" for public intake-form submissions; null for owner-created
   embedding         Unsupported("vector(1536)")?
   // GTM job-board monitor fields — null/false for manually pasted Phase 2 jobs
   externalId        String?    @unique // ats+slug+job_id, dedupe key for re-polling

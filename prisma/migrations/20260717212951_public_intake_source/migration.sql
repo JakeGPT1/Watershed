@@ -1,0 +1,3 @@
+ALTER TABLE "Candidate" ADD COLUMN "email" TEXT;
+ALTER TABLE "Candidate" ADD COLUMN "source" TEXT;
+ALTER TABLE "Job" ADD COLUMN "source" TEXT;

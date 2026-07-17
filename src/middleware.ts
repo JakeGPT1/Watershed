@@ -4,7 +4,10 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLIC_PATHS = ["/login", "/auth"];
 // Cron endpoints have no Supabase session — they authenticate via CRON_SECRET
 // inside the route handler itself, not via this middleware.
-const BYPASS_PATHS = ["/api/cron"];
+// /api/public is the marketing site's intake surface (candidate + job forms) —
+// unauthenticated by design, guarded instead by honeypot/caps/throttle/CORS
+// inside the route handlers themselves.
+const BYPASS_PATHS = ["/api/cron", "/api/public"];
 
 export async function middleware(request: NextRequest) {
   if (BYPASS_PATHS.some((p) => request.nextUrl.pathname.startsWith(p))) {

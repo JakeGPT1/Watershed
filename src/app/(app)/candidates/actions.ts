@@ -5,9 +5,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/supabase/server";
 import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
-import { parseResume, parseLinkedIn, tagNote, summarizeTranscript } from "@/lib/ai";
+import { parseLinkedIn, tagNote, summarizeTranscript } from "@/lib/ai";
 import { applyAiTags, skillsToTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding } from "@/lib/embedding";
+import { ingestResumeFile } from "@/lib/publicIntake";
 import { failTo } from "@/lib/formError";
 
 const LINKEDIN_RE = /^https?:\/\/(www\.)?linkedin\.com\/in\/[^\s]+$/i;
@@ -81,42 +82,11 @@ export async function uploadResume(candidateId: string, formData: FormData) {
   if (file.size > 10 * 1024 * 1024) failTo(pagePath, "Resume must be under 10MB");
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-  const isText = file.type.startsWith("text/") || /\.(txt|md)$/i.test(file.name);
-  if (!isPdf && !isText) failTo(pagePath, "Upload a PDF or plain-text resume");
-
-  // Store the file
-  const admin = createAdminClient();
-  const path = `${candidateId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
-  const { error: upErr } = await admin.storage
-    .from(RESUMES_BUCKET)
-    .upload(path, buffer, { contentType: file.type || "application/octet-stream" });
-  if (upErr) failTo(pagePath, `Storage upload failed: ${upErr.message}`);
-
-  // Parse with Claude (native PDF support)
-  let parsed;
   try {
-    parsed = await parseResume(
-      isPdf ? { pdfBase64: buffer.toString("base64") } : { text: buffer.toString("utf-8") }
-    );
+    await ingestResumeFile(candidateId, { buffer, type: file.type, name: file.name });
   } catch (e) {
-    failTo(pagePath, e instanceof Error ? e.message : "Resume parsing failed");
+    failTo(pagePath, e instanceof Error ? e.message : "Resume upload failed");
   }
-
-  // Fill fields — resume parse fills empty fields, never clobbers user-entered values
-  const existing = await prisma.candidate.findUniqueOrThrow({ where: { id: candidateId } });
-  await prisma.candidate.update({
-    where: { id: candidateId },
-    data: {
-      resumeUrl: path,
-      currentTitle: existing.currentTitle ?? parsed.currentTitle,
-      location: existing.location ?? parsed.location,
-      compExpect: existing.compExpect ?? parsed.compExpect,
-      summary: existing.summary ?? parsed.summary,
-    },
-  });
-  await applyAiTags(candidateId, skillsToTags(parsed.skills));
-  await recomputeCandidateEmbedding(candidateId).catch(console.error);
   revalidatePath(pagePath);
 }
 
