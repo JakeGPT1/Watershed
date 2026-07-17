@@ -4,7 +4,7 @@ import { matchCandidatesToJob } from "@/lib/matching";
 import { GTM_SEED_COMPANIES } from "./companies";
 import { discoverAts } from "./discover";
 import { fetchPostings, type NormalizedPosting } from "./fetchPostings";
-import { isGtmRole, isLeadershipGtmRole } from "./filter";
+import { isGtmRole, isLeadershipGtmRole, isUsLocation, GTM_US_ONLY } from "./filter";
 
 export interface MonitorRunResult {
   companiesChecked: number;
@@ -56,7 +56,9 @@ async function ensureCompaniesResolved(): Promise<string[]> {
 }
 
 function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | null {
-  const gtm = postings.filter((p) => isGtmRole(p.title, p.department));
+  const gtm = postings.filter(
+    (p) => isGtmRole(p.title, p.department) && (!GTM_US_ONLY || isUsLocation(p.location))
+  );
   if (gtm.length === 0) return null;
   // Leadership hires first (strongest buying signal), then most recent.
   gtm.sort((a, b) => {
@@ -140,6 +142,20 @@ export async function runGtmMonitor(): Promise<MonitorRunResult> {
     });
 
     opportunityJobIds.push(job.id);
+  }
+
+  // Stale-cleanup: a company whose only GTM roles are non-US now picks nothing new
+  // this run, so its previously-surfaced non-US opportunity would otherwise linger.
+  if (GTM_US_ONLY) {
+    const current = await prisma.job.findMany({
+      where: { isGtmOpportunity: true },
+      select: { id: true, location: true },
+    });
+    for (const j of current) {
+      if (!isUsLocation(j.location)) {
+        await prisma.job.update({ where: { id: j.id }, data: { isGtmOpportunity: false } });
+      }
+    }
   }
 
   // Auto-match candidates against each current opportunity.
