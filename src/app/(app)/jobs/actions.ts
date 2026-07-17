@@ -24,6 +24,13 @@ export async function winOpportunity(jobId: string) {
     include: { company: true, matches: true },
   });
 
+  // Idempotent win: Project.jobId is unique, so re-clicking Win on an already-won
+  // opportunity must not attempt a second create (that throws a P2002 constraint error).
+  const existingProject = await prisma.project.findUnique({ where: { jobId } });
+  if (existingProject) {
+    redirect(`/projects/${existingProject.id}`);
+  }
+
   const project = await prisma.project.create({
     data: {
       title: job.company ? `${job.company.name} — ${job.title}` : job.title,
@@ -115,7 +122,10 @@ export async function draftBlindEmail(jobId: string) {
 
 export async function dismissOpportunity(jobId: string) {
   await requireOwner();
-  await prisma.job.update({ where: { id: jobId }, data: { isGtmOpportunity: false } });
+  await prisma.job.update({
+    where: { id: jobId },
+    data: { isGtmOpportunity: false, dismissedAt: new Date() },
+  });
   revalidatePath("/jobs");
 }
 

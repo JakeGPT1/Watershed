@@ -108,8 +108,11 @@ const US_STATE_NAMES = [
   "district of columbia", "washington dc",
 ];
 
+// Anchored to a comma so a bare prose word ("in", "or", "hi", "me", "ca"...) never counts —
+// only the realistic "City, ST" job-board pattern does. A whitespace-only boundary (the
+// original version of this regex) matched "in" in "Hybrid in London" as Indiana.
 const US_STATE_ABBR_RE =
-  /(^|[,\s])(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)([,\s]|$)/i;
+  /,\s*(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\s*(,|$)/i;
 
 const NON_US_CITY_MARKERS = [
   "london",

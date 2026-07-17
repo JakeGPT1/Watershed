@@ -36,8 +36,8 @@ async function ensureCompaniesResolved(): Promise<string[]> {
       });
     }
 
-    // Resolve ATS only if unknown — cache the result so we never re-probe a resolved company.
-    if (!company.atsType && company.atsType !== "unknown") {
+    // Resolve ATS only if not yet known — cache the result so we never re-probe a resolved company.
+    if (!company.atsType) {
       const discovered = await discoverAts(seed.name);
       if (discovered) {
         await prisma.company.update({
@@ -55,7 +55,8 @@ async function ensureCompaniesResolved(): Promise<string[]> {
   return newlyResolved;
 }
 
-function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | null {
+/** GTM+US-qualifying postings for a company, best (leadership, then most recent) first. */
+function rankQualifyingPostings(postings: NormalizedPosting[]): NormalizedPosting[] {
   const gtm = postings.filter((p) => {
     if (!isGtmRole(p.title, p.department)) return false;
     if (!GTM_US_ONLY) return true;
@@ -64,7 +65,6 @@ function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | nul
     if (hasNonUsRegionMarker(p.title) || hasNonUsRegionMarker(p.department ?? "")) return false;
     return isUsLocation(p.location);
   });
-  if (gtm.length === 0) return null;
   // Leadership hires first (strongest buying signal), then most recent.
   gtm.sort((a, b) => {
     const aLead = isLeadershipGtmRole(a.title) ? 1 : 0;
@@ -74,8 +74,10 @@ function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | nul
     const bTime = b.postedAt?.getTime() ?? 0;
     return bTime - aTime;
   });
-  return gtm[0];
+  return gtm;
 }
+
+const MAX_DISMISSED_SKIPS = 5;
 
 export async function runGtmMonitor(): Promise<MonitorRunResult> {
   const newlyDiscoveredCompanies = await ensureCompaniesResolved();
@@ -95,11 +97,21 @@ export async function runGtmMonitor(): Promise<MonitorRunResult> {
     );
     if (!postings || postings.length === 0) continue;
 
-    const best = pickBestPosting(postings);
-    if (!best) continue;
+    const ranked = rankQualifyingPostings(postings);
+    if (ranked.length === 0) continue;
 
-    // Dedupe: if we've already discovered this exact posting, reuse/refresh it as the opportunity.
-    const existing = await prisma.job.findUnique({ where: { externalId: best.externalId } });
+    // Walk the ranked list, skipping any posting the user already dismissed — otherwise
+    // the monitor would silently resurrect it on the very next run.
+    let best: NormalizedPosting | null = null;
+    let existing: Awaited<ReturnType<typeof prisma.job.findUnique>> = null;
+    for (const candidate of ranked.slice(0, MAX_DISMISSED_SKIPS)) {
+      const found = await prisma.job.findUnique({ where: { externalId: candidate.externalId } });
+      if (found?.dismissedAt) continue;
+      best = candidate;
+      existing = found;
+      break;
+    }
+    if (!best) continue;
 
     const matchText = `${best.title}\n${best.department ?? ""}\n${best.description}`.slice(0, 24000);
     const vector = JSON.stringify(await embed(matchText));

@@ -144,6 +144,7 @@ model Job {
   isGtmOpportunity  Boolean    @default(false) // one of the curated top-N picks, not just any GTM-matching posting
   isLeadershipRole  Boolean    @default(false)
   discoveredAt      DateTime?
+  dismissedAt       DateTime?  // set by dismissOpportunity; monitor must not re-promote this posting
   matches           Match[]
   outreach          Outreach[]
   project           Project?

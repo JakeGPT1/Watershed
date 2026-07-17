@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { signOut } from "./actions";
 
+// Applies to every server action invoked from a page under this layout (candidates, jobs,
+// projects, companies). Several of these actions now chain multiple AI calls — resume
+// parsing, transcript summarization, embedding, and (since the auto-rematch hook) up to
+// several match-rationale calls per candidate save — which can exceed the platform default
+// duration. The cron route sets its own maxDuration separately.
+export const maxDuration = 60;
+
 const NAV = [
   { href: "/candidates", label: "Candidates" },
   { href: "/projects", label: "Projects" },
