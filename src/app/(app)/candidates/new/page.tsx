@@ -1,12 +1,15 @@
 import { createCandidate } from "../actions";
+import { ErrorBanner } from "../../_components/ErrorBanner";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
 
-export default function NewCandidatePage() {
+export default async function NewCandidatePage(props: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await props.searchParams;
   return (
     <div className="max-w-lg">
       <h1 className="mb-6 text-2xl font-semibold text-stone-900">Add candidate</h1>
+      <ErrorBanner error={error} clearHref="/candidates/new" />
       <form action={createCandidate} className="space-y-4 rounded-xl border border-stone-200 bg-white p-6">
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-700">Name *</label>

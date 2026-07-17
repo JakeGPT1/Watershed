@@ -8,6 +8,7 @@ import { runGtmMonitor } from "@/lib/gtm/monitor";
 import { draftBlindOutreach, draftStandardOutreach, extractJobFromJD } from "@/lib/ai";
 import { setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
+import { failTo } from "@/lib/formError";
 
 export async function runMonitor(): Promise<void> {
   await requireOwner();
@@ -89,26 +90,29 @@ export async function draftBlindEmail(jobId: string) {
   });
 
   const top = job.matches[0];
-  if (!top) throw new Error("No matched candidate to feature yet");
+  if (!top) failTo("/jobs", "No matched candidate to feature yet");
   const candidate = top.candidate;
 
   const skills = candidate.tags.map((t) => t.tag.label).join(", ");
   if (!candidate.summary && !skills && !candidate.currentTitle) {
-    throw new Error(
-      "Top candidate has no profile data yet — add a resume, notes, or LinkedIn text first"
-    );
+    failTo("/jobs", "Top candidate has no profile data yet — add a resume, notes, or LinkedIn text first");
   }
 
-  const draft = await draftBlindOutreach({
-    targetCompany: job.company?.name ?? "the company",
-    roleTitle: job.title,
-    roleContext: `${job.department ?? ""} ${job.rawText.slice(0, 1500)}`.trim(),
-    candidateSummary:
-      candidate.summary || "(no summary on file — describe only from skills/title/location provided)",
-    candidateSeniority: candidate.currentTitle || "(not specified)",
-    candidateSkills: skills || "(none listed)",
-    candidateLocation: candidate.location || "(not specified)",
-  });
+  let draft;
+  try {
+    draft = await draftBlindOutreach({
+      targetCompany: job.company?.name ?? "the company",
+      roleTitle: job.title,
+      roleContext: `${job.department ?? ""} ${job.rawText.slice(0, 1500)}`.trim(),
+      candidateSummary:
+        candidate.summary || "(no summary on file — describe only from skills/title/location provided)",
+      candidateSeniority: candidate.currentTitle || "(not specified)",
+      candidateSkills: skills || "(none listed)",
+      candidateLocation: candidate.location || "(not specified)",
+    });
+  } catch (e) {
+    failTo("/jobs", e instanceof Error ? e.message : "Could not generate blind draft");
+  }
 
   const subject = redactName(draft.subject, candidate.name);
   const body = redactName(draft.body, candidate.name);
@@ -133,7 +137,7 @@ export async function dismissOpportunity(jobId: string) {
 export async function createManualJob(formData: FormData) {
   await requireOwner();
   const rawText = String(formData.get("rawText") ?? "").trim();
-  if (rawText.length < 40) throw new Error("Paste the full job description");
+  if (rawText.length < 40) failTo("/jobs/new", "Paste the full job description");
 
   const companyName = String(formData.get("companyName") ?? "").trim();
   let companyId: string | undefined;
@@ -143,7 +147,12 @@ export async function createManualJob(formData: FormData) {
     companyId = company.id;
   }
 
-  const extract = await extractJobFromJD(rawText);
+  let extract;
+  try {
+    extract = await extractJobFromJD(rawText);
+  } catch (e) {
+    failTo("/jobs/new", e instanceof Error ? e.message : "Could not extract job details");
+  }
 
   const job = await prisma.job.create({
     data: {
@@ -188,24 +197,30 @@ export async function draftOutreach(jobId: string, formData: FormData) {
     },
   });
 
+  const jobPath = `/jobs/${jobId}`;
   if (job.matches.length === 0) {
-    throw new Error("No matched candidates yet — run matching first");
+    failTo(jobPath, "No matched candidates yet — run matching first");
   }
 
   const contact = contactId ? await prisma.contact.findUnique({ where: { id: contactId } }) : null;
 
-  const draft = await draftStandardOutreach({
-    jobTitle: job.title,
-    company: job.company?.name ?? "the company",
-    contactName: contact?.name ?? null,
-    candidates: job.matches.map((m) => ({
-      name: m.candidate.name,
-      title: m.candidate.currentTitle ?? "",
-      skills: m.candidate.tags.map((t) => t.tag.label).join(", "),
-      summary: m.candidate.summary ?? "",
-      rationale: m.rationale ?? "",
-    })),
-  });
+  let draft;
+  try {
+    draft = await draftStandardOutreach({
+      jobTitle: job.title,
+      company: job.company?.name ?? "the company",
+      contactName: contact?.name ?? null,
+      candidates: job.matches.map((m) => ({
+        name: m.candidate.name,
+        title: m.candidate.currentTitle ?? "",
+        skills: m.candidate.tags.map((t) => t.tag.label).join(", "),
+        summary: m.candidate.summary ?? "",
+        rationale: m.rationale ?? "",
+      })),
+    });
+  } catch (e) {
+    failTo(jobPath, e instanceof Error ? e.message : "Could not generate outreach draft");
+  }
 
   await prisma.outreach.create({
     data: { jobId, contactId, subject: draft.subject, body: draft.body, status: "draft" },

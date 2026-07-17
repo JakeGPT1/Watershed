@@ -1,15 +1,18 @@
 import { createManualJob } from "../actions";
+import { ErrorBanner } from "../../_components/ErrorBanner";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
 
-export default function NewJobPage() {
+export default async function NewJobPage(props: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await props.searchParams;
   return (
     <div className="max-w-lg">
       <h1 className="mb-1 text-2xl font-semibold text-stone-900">Paste a Job</h1>
       <p className="mb-6 text-sm text-stone-500">
         Paste any job description — we&apos;ll extract it and rank your candidates against it.
       </p>
+      <ErrorBanner error={error} clearHref="/jobs/new" />
       <form action={createManualJob} className="space-y-4 rounded-xl border border-stone-200 bg-white p-6">
         <div>
           <label className="mb-1 block text-sm font-medium text-stone-700">Job description *</label>

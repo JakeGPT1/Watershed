@@ -2,8 +2,10 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail, refreshJobMatches } from "./actions";
 import { CopyButton } from "./_components/CopyButton";
+import { ErrorBanner } from "../_components/ErrorBanner";
 
-export default async function JobsPage() {
+export default async function JobsPage(props: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await props.searchParams;
   const opportunities = await prisma.job.findMany({
     where: { isGtmOpportunity: true },
     include: {
@@ -32,6 +34,7 @@ export default async function JobsPage() {
 
   return (
     <div className="max-w-3xl">
+      <ErrorBanner error={error} clearHref="/jobs" />
       <div className="mb-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-stone-900">GTM Opportunities</h1>
         <div className="flex gap-2">

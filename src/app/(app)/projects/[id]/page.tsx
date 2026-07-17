@@ -12,11 +12,16 @@ import {
   getJdSignedUrl,
 } from "../actions";
 import { AutoSubmitSelect } from "../_components/AutoSubmitSelect";
+import { ErrorBanner } from "../../_components/ErrorBanner";
 
 const selectField = "rounded-lg border border-stone-300 bg-white px-2 py-1 text-xs outline-none focus:border-stone-500";
 
-export default async function ProjectPage(props: { params: Promise<{ id: string }> }) {
+export default async function ProjectPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { id } = await props.params;
+  const { error } = await props.searchParams;
 
   const project = await prisma.project.findUnique({
     where: { id },
@@ -39,6 +44,7 @@ export default async function ProjectPage(props: { params: Promise<{ id: string 
 
   return (
     <div className="max-w-3xl">
+      <ErrorBanner error={error} clearHref={`/projects/${id}`} />
       <div className="mb-6 flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-stone-900">{project.title}</h1>

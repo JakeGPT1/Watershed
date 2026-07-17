@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/supabase/server";
+import { failTo } from "@/lib/formError";
 
 export async function createCompany(formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Name is required");
+  if (!name) failTo("/companies/new", "Name is required");
 
   const company = await prisma.company.create({
     data: {
@@ -24,7 +25,7 @@ export async function createCompany(formData: FormData) {
 export async function updateCompany(companyId: string, formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Name is required");
+  if (!name) failTo(`/companies/${companyId}`, "Name is required");
 
   await prisma.company.update({
     where: { id: companyId },
@@ -42,7 +43,7 @@ export async function updateCompany(companyId: string, formData: FormData) {
 export async function addContact(companyId: string, formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Contact name is required");
+  if (!name) failTo(`/companies/${companyId}`, "Contact name is required");
 
   await prisma.contact.create({
     data: {
@@ -58,7 +59,7 @@ export async function addContact(companyId: string, formData: FormData) {
 export async function updateContact(contactId: string, companyId: string, formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Contact name is required");
+  if (!name) failTo(`/companies/${companyId}`, "Contact name is required");
 
   await prisma.contact.update({
     where: { id: contactId },

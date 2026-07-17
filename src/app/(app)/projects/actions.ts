@@ -7,6 +7,7 @@ import { requireOwner } from "@/lib/supabase/server";
 import { createAdminClient, JD_BUCKET } from "@/lib/supabase/admin";
 import { STAGES } from "@/lib/stages";
 import { analyzeJobDescription } from "@/lib/ai";
+import { failTo } from "@/lib/formError";
 
 const STATUSES = ["open", "filled", "closed"] as const;
 
@@ -31,7 +32,7 @@ function mergeJdAnalysis(existingNotes: string | null, analysis: string): string
 export async function createProject(formData: FormData) {
   await requireOwner();
   const title = String(formData.get("title") ?? "").trim();
-  if (!title) throw new Error("Title is required");
+  if (!title) failTo("/projects/new", "Title is required");
 
   const companyName = String(formData.get("companyName") ?? "").trim();
   let companyId: string | undefined;
@@ -55,7 +56,7 @@ export async function updateProjectStatus(projectId: string, formData: FormData)
   await requireOwner();
   const status = String(formData.get("status") ?? "");
   if (!STATUSES.includes(status as (typeof STATUSES)[number])) {
-    throw new Error("Invalid status");
+    failTo(`/projects/${projectId}`, "Invalid status");
   }
   await prisma.project.update({ where: { id: projectId }, data: { status } });
   revalidatePath(`/projects/${projectId}`);
@@ -79,13 +80,14 @@ export async function addCandidatesToProject(projectId: string, formData: FormDa
 
 export async function uploadJobDescription(projectId: string, formData: FormData) {
   await requireOwner();
+  const pagePath = `/projects/${projectId}`;
   const file = formData.get("jd") as File | null;
-  if (!file || file.size === 0) throw new Error("No file provided");
-  if (file.size > 10 * 1024 * 1024) throw new Error("File must be under 10MB");
+  if (!file || file.size === 0) failTo(pagePath, "No file provided");
+  if (file.size > 10 * 1024 * 1024) failTo(pagePath, "File must be under 10MB");
 
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const isText = file.type.startsWith("text/") || /\.(txt|md)$/i.test(file.name);
-  if (!isPdf && !isText) throw new Error("Upload a PDF or plain-text job description");
+  if (!isPdf && !isText) failTo(pagePath, "Upload a PDF or plain-text job description");
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -95,12 +97,17 @@ export async function uploadJobDescription(projectId: string, formData: FormData
   const { error: upErr } = await admin.storage
     .from(JD_BUCKET)
     .upload(path, buffer, { contentType: file.type || "application/octet-stream" });
-  if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+  if (upErr) failTo(pagePath, `Storage upload failed: ${upErr.message}`);
 
   // Analyze
-  const analysis = await analyzeJobDescription(
-    isPdf ? { pdfBase64: buffer.toString("base64") } : { text: buffer.toString("utf-8") }
-  );
+  let analysis;
+  try {
+    analysis = await analyzeJobDescription(
+      isPdf ? { pdfBase64: buffer.toString("base64") } : { text: buffer.toString("utf-8") }
+    );
+  } catch (e) {
+    failTo(pagePath, e instanceof Error ? e.message : "Could not analyze job description");
+  }
 
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
   await prisma.project.update({
@@ -136,7 +143,7 @@ export async function addCandidateToProjectFromCandidate(
 ) {
   await requireOwner();
   const projectId = String(formData.get("projectId") ?? "");
-  if (!projectId) throw new Error("Pick a project");
+  if (!projectId) failTo(`/candidates/${candidateId}`, "Pick a project");
 
   await prisma.projectCandidate.upsert({
     where: { projectId_candidateId: { projectId, candidateId } },
@@ -151,7 +158,7 @@ export async function setStage(projectId: string, candidateId: string, formData:
   await requireOwner();
   const stage = String(formData.get("stage") ?? "");
   if (!STAGES.includes(stage as (typeof STAGES)[number])) {
-    throw new Error("Invalid stage");
+    failTo(`/projects/${projectId}`, "Invalid stage");
   }
   await prisma.projectCandidate.update({
     where: { projectId_candidateId: { projectId, candidateId } },

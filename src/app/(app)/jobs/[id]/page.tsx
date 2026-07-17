@@ -3,9 +3,14 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { refreshJobMatches, draftOutreach } from "../actions";
 import { CopyButton } from "../_components/CopyButton";
+import { ErrorBanner } from "../../_components/ErrorBanner";
 
-export default async function JobPage(props: { params: Promise<{ id: string }> }) {
+export default async function JobPage(props: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string }>;
+}) {
   const { id } = await props.params;
+  const { error } = await props.searchParams;
 
   const job = await prisma.job.findUnique({
     where: { id },
@@ -22,6 +27,7 @@ export default async function JobPage(props: { params: Promise<{ id: string }> }
 
   return (
     <div className="max-w-3xl">
+      <ErrorBanner error={error} clearHref={`/jobs/${id}`} />
       <div className="mb-6 rounded-xl border border-stone-200 bg-white p-6">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-semibold text-stone-900">{job.title}</h1>

@@ -8,6 +8,7 @@ import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
 import { parseResume, parseLinkedIn, tagNote, summarizeTranscript } from "@/lib/ai";
 import { applyAiTags, skillsToTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding } from "@/lib/embedding";
+import { failTo } from "@/lib/formError";
 
 const LINKEDIN_RE = /^https?:\/\/(www\.)?linkedin\.com\/in\/[^\s]+$/i;
 
@@ -22,7 +23,14 @@ function cleanLinkedInUrl(raw: string): string | null {
 export async function createCandidate(formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Name is required");
+  if (!name) failTo("/candidates/new", "Name is required");
+
+  let linkedinUrl: string | null;
+  try {
+    linkedinUrl = cleanLinkedInUrl(String(formData.get("linkedinUrl") ?? ""));
+  } catch (e) {
+    failTo("/candidates/new", e instanceof Error ? e.message : "Invalid LinkedIn URL");
+  }
 
   const candidate = await prisma.candidate.create({
     data: {
@@ -30,7 +38,7 @@ export async function createCandidate(formData: FormData) {
       currentTitle: String(formData.get("currentTitle") ?? "").trim() || null,
       location: String(formData.get("location") ?? "").trim() || null,
       compExpect: String(formData.get("compExpect") ?? "").trim() || null,
-      linkedinUrl: cleanLinkedInUrl(String(formData.get("linkedinUrl") ?? "")),
+      linkedinUrl,
     },
   });
   redirect(`/candidates/${candidate.id}`);
@@ -38,8 +46,16 @@ export async function createCandidate(formData: FormData) {
 
 export async function updateCandidate(candidateId: string, formData: FormData) {
   await requireOwner();
+  const editPath = `/candidates/${candidateId}/edit`;
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) throw new Error("Name is required");
+  if (!name) failTo(editPath, "Name is required");
+
+  let linkedinUrl: string | null;
+  try {
+    linkedinUrl = cleanLinkedInUrl(String(formData.get("linkedinUrl") ?? ""));
+  } catch (e) {
+    failTo(editPath, e instanceof Error ? e.message : "Invalid LinkedIn URL");
+  }
 
   await prisma.candidate.update({
     where: { id: candidateId },
@@ -48,7 +64,7 @@ export async function updateCandidate(candidateId: string, formData: FormData) {
       currentTitle: String(formData.get("currentTitle") ?? "").trim() || null,
       location: String(formData.get("location") ?? "").trim() || null,
       compExpect: String(formData.get("compExpect") ?? "").trim() || null,
-      linkedinUrl: cleanLinkedInUrl(String(formData.get("linkedinUrl") ?? "")),
+      linkedinUrl,
       summary: String(formData.get("summary") ?? "").trim() || null,
     },
   });
@@ -59,14 +75,15 @@ export async function updateCandidate(candidateId: string, formData: FormData) {
 
 export async function uploadResume(candidateId: string, formData: FormData) {
   await requireOwner();
+  const pagePath = `/candidates/${candidateId}`;
   const file = formData.get("resume") as File | null;
-  if (!file || file.size === 0) throw new Error("No file provided");
-  if (file.size > 10 * 1024 * 1024) throw new Error("Resume must be under 10MB");
+  if (!file || file.size === 0) failTo(pagePath, "No file provided");
+  if (file.size > 10 * 1024 * 1024) failTo(pagePath, "Resume must be under 10MB");
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const isText = file.type.startsWith("text/") || /\.(txt|md)$/i.test(file.name);
-  if (!isPdf && !isText) throw new Error("Upload a PDF or plain-text resume");
+  if (!isPdf && !isText) failTo(pagePath, "Upload a PDF or plain-text resume");
 
   // Store the file
   const admin = createAdminClient();
@@ -74,12 +91,17 @@ export async function uploadResume(candidateId: string, formData: FormData) {
   const { error: upErr } = await admin.storage
     .from(RESUMES_BUCKET)
     .upload(path, buffer, { contentType: file.type || "application/octet-stream" });
-  if (upErr) throw new Error(`Storage upload failed: ${upErr.message}`);
+  if (upErr) failTo(pagePath, `Storage upload failed: ${upErr.message}`);
 
   // Parse with Claude (native PDF support)
-  const parsed = await parseResume(
-    isPdf ? { pdfBase64: buffer.toString("base64") } : { text: buffer.toString("utf-8") }
-  );
+  let parsed;
+  try {
+    parsed = await parseResume(
+      isPdf ? { pdfBase64: buffer.toString("base64") } : { text: buffer.toString("utf-8") }
+    );
+  } catch (e) {
+    failTo(pagePath, e instanceof Error ? e.message : "Resume parsing failed");
+  }
 
   // Fill fields — resume parse fills empty fields, never clobbers user-entered values
   const existing = await prisma.candidate.findUniqueOrThrow({ where: { id: candidateId } });
@@ -95,24 +117,30 @@ export async function uploadResume(candidateId: string, formData: FormData) {
   });
   await applyAiTags(candidateId, skillsToTags(parsed.skills));
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
-  revalidatePath(`/candidates/${candidateId}`);
+  revalidatePath(pagePath);
 }
 
 export async function pasteLinkedIn(candidateId: string, formData: FormData) {
   await requireOwner();
+  const pagePath = `/candidates/${candidateId}`;
   const rawText = String(formData.get("linkedinText") ?? "").trim();
-  if (rawText.length < 40) throw new Error("Paste the profile text (About/Experience/Skills)");
+  if (rawText.length < 40) failTo(pagePath, "Paste the profile text (About/Experience/Skills)");
 
   const existing = await prisma.candidate.findUniqueOrThrow({
     where: { id: candidateId },
     include: { tags: { include: { tag: true } } },
   });
 
-  const parsed = await parseLinkedIn(
-    rawText,
-    existing.summary,
-    existing.tags.map((t) => t.tag.label)
-  );
+  let parsed;
+  try {
+    parsed = await parseLinkedIn(
+      rawText,
+      existing.summary,
+      existing.tags.map((t) => t.tag.label)
+    );
+  } catch (e) {
+    failTo(pagePath, e instanceof Error ? e.message : "LinkedIn parsing failed");
+  }
 
   // Merge, don't overwrite: fill empty fields; summary only if model returned an improvement
   await prisma.candidate.update({
@@ -126,35 +154,43 @@ export async function pasteLinkedIn(candidateId: string, formData: FormData) {
   });
   await applyAiTags(candidateId, skillsToTags(parsed.skills));
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
-  revalidatePath(`/candidates/${candidateId}`);
+  revalidatePath(pagePath);
 }
 
 export async function addNote(candidateId: string, formData: FormData) {
   await requireOwner();
+  const pagePath = `/candidates/${candidateId}`;
   const body = String(formData.get("body") ?? "").trim();
-  if (!body) throw new Error("Note is empty");
+  if (!body) failTo(pagePath, "Note is empty");
 
   await prisma.note.create({ data: { candidateId, body } });
   const tags = await tagNote(body).catch(() => []);
   await applyAiTags(candidateId, tags);
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
-  revalidatePath(`/candidates/${candidateId}`);
+  revalidatePath(pagePath);
 }
 
 export async function addTranscript(candidateId: string, formData: FormData) {
   await requireOwner();
+  const pagePath = `/candidates/${candidateId}`;
   const rawText = String(formData.get("rawText") ?? "").trim();
-  if (rawText.length < 40) throw new Error("Transcript looks too short");
+  if (rawText.length < 40) failTo(pagePath, "Transcript looks too short");
   const callDateRaw = String(formData.get("callDate") ?? "").trim();
   const callDate = callDateRaw ? new Date(callDateRaw) : new Date();
 
-  const parsed = await summarizeTranscript(rawText);
+  let parsed;
+  try {
+    parsed = await summarizeTranscript(rawText);
+  } catch (e) {
+    failTo(pagePath, e instanceof Error ? e.message : "Transcript summarization failed");
+  }
+
   await prisma.transcript.create({
     data: { candidateId, rawText, summary: parsed.summary, callDate },
   });
   await applyAiTags(candidateId, parsed.tags);
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
-  revalidatePath(`/candidates/${candidateId}`);
+  revalidatePath(pagePath);
 }
 
 export async function addManualTag(candidateId: string, formData: FormData) {
