@@ -1,0 +1,156 @@
+import { prisma } from "@/lib/prisma";
+import { embed } from "@/lib/embedding";
+import { matchCandidatesToJob } from "@/lib/matching";
+import { GTM_SEED_COMPANIES } from "./companies";
+import { discoverAts } from "./discover";
+import { fetchPostings, type NormalizedPosting } from "./fetchPostings";
+import { isGtmRole, isLeadershipGtmRole } from "./filter";
+
+export interface MonitorRunResult {
+  companiesChecked: number;
+  companiesResolved: number;
+  newlyDiscoveredCompanies: string[]; // resolved this run via slug discovery
+  opportunityJobIds: string[]; // the curated top-N, one per company
+}
+
+/** Ensure every seed company exists as a GTM-target Company row, resolving unknown ATS slugs. */
+async function ensureCompaniesResolved(): Promise<string[]> {
+  const newlyResolved: string[] = [];
+
+  for (const seed of GTM_SEED_COMPANIES) {
+    let company = await prisma.company.findFirst({ where: { name: seed.name } });
+
+    if (!company) {
+      company = await prisma.company.create({
+        data: {
+          name: seed.name,
+          isGtmTarget: true,
+          atsType: seed.atsType ?? null,
+          atsSlug: seed.atsSlug ?? null,
+        },
+      });
+    } else if (!company.isGtmTarget) {
+      company = await prisma.company.update({
+        where: { id: company.id },
+        data: { isGtmTarget: true, atsType: company.atsType ?? seed.atsType ?? null, atsSlug: company.atsSlug ?? seed.atsSlug ?? null },
+      });
+    }
+
+    // Resolve ATS only if unknown — cache the result so we never re-probe a resolved company.
+    if (!company.atsType && company.atsType !== "unknown") {
+      const discovered = await discoverAts(seed.name);
+      if (discovered) {
+        await prisma.company.update({
+          where: { id: company.id },
+          data: { atsType: discovered.atsType, atsSlug: discovered.atsSlug },
+        });
+        newlyResolved.push(seed.name);
+      } else {
+        // Mark unknown so we never re-probe — per spec, don't build scrapers for these in v1.
+        await prisma.company.update({ where: { id: company.id }, data: { atsType: "unknown" } });
+      }
+    }
+  }
+
+  return newlyResolved;
+}
+
+function pickBestPosting(postings: NormalizedPosting[]): NormalizedPosting | null {
+  const gtm = postings.filter((p) => isGtmRole(p.title, p.department));
+  if (gtm.length === 0) return null;
+  // Leadership hires first (strongest buying signal), then most recent.
+  gtm.sort((a, b) => {
+    const aLead = isLeadershipGtmRole(a.title) ? 1 : 0;
+    const bLead = isLeadershipGtmRole(b.title) ? 1 : 0;
+    if (aLead !== bLead) return bLead - aLead;
+    const aTime = a.postedAt?.getTime() ?? 0;
+    const bTime = b.postedAt?.getTime() ?? 0;
+    return bTime - aTime;
+  });
+  return gtm[0];
+}
+
+export async function runGtmMonitor(): Promise<MonitorRunResult> {
+  const newlyDiscoveredCompanies = await ensureCompaniesResolved();
+
+  const targets = await prisma.company.findMany({
+    where: { isGtmTarget: true, atsType: { not: "unknown" }, NOT: { atsType: null } },
+  });
+
+  const opportunityJobIds: string[] = [];
+
+  for (const company of targets) {
+    if (!company.atsType || !company.atsSlug || company.atsType === "unknown") continue;
+
+    const postings = await fetchPostings(
+      company.atsType as "greenhouse" | "lever" | "ashby",
+      company.atsSlug
+    );
+    if (!postings || postings.length === 0) continue;
+
+    const best = pickBestPosting(postings);
+    if (!best) continue;
+
+    // Dedupe: if we've already discovered this exact posting, reuse/refresh it as the opportunity.
+    const existing = await prisma.job.findUnique({ where: { externalId: best.externalId } });
+
+    const matchText = `${best.title}\n${best.department ?? ""}\n${best.description}`.slice(0, 24000);
+    const vector = JSON.stringify(await embed(matchText));
+
+    let job;
+    if (existing) {
+      job = await prisma.job.update({
+        where: { id: existing.id },
+        data: {
+          title: best.title,
+          department: best.department,
+          location: best.location,
+          postedAt: best.postedAt,
+          sourceUrl: best.url,
+          rawText: best.description,
+          isGtmOpportunity: true,
+          isLeadershipRole: isLeadershipGtmRole(best.title),
+          discoveredAt: new Date(),
+        },
+      });
+    } else {
+      job = await prisma.job.create({
+        data: {
+          title: best.title,
+          companyId: company.id,
+          sourceUrl: best.url,
+          rawText: best.description,
+          externalId: best.externalId,
+          department: best.department,
+          location: best.location,
+          postedAt: best.postedAt,
+          isGtmOpportunity: true,
+          isLeadershipRole: isLeadershipGtmRole(best.title),
+          discoveredAt: new Date(),
+        },
+      });
+    }
+    await prisma.$executeRaw`update "Job" set embedding = ${vector}::vector where id = ${job.id}`;
+
+    // Any GTM posting NOT chosen as the top pick for this run no longer counts as
+    // the live opportunity for this company (only one opportunity per company at a time).
+    await prisma.job.updateMany({
+      where: { companyId: company.id, isGtmOpportunity: true, id: { not: job.id } },
+      data: { isGtmOpportunity: false },
+    });
+
+    opportunityJobIds.push(job.id);
+  }
+
+  // Auto-match candidates against each current opportunity.
+  for (const jobId of opportunityJobIds) {
+    await matchCandidatesToJob(jobId);
+  }
+
+  return {
+    companiesChecked: GTM_SEED_COMPANIES.length,
+    companiesResolved: targets.length,
+    newlyDiscoveredCompanies,
+    opportunityJobIds,
+  };
+}

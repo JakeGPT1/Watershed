@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Company {
+  id          String    @id @default(cuid())
+  name        String
+  industry    String?
+  website     String?
+  notes       String?
+  isGtmTarget Boolean   @default(false) // tracked by the GTM job-board monitor
+  atsType     String?   // "greenhouse" | "lever" | "ashby" | "unknown"
+  atsSlug     String?
+  contacts    Contact[]
+  jobs        Job[]
+  projects    Project[]
+  createdAt   DateTime  @default(now())
+}
+
+model Project {
+  id         String             @id @default(cuid())
+  title      String
+  companyId  String?
+  company    Company?           @relation(fields: [companyId], references: [id])
+  jobId      String?            @unique
+  job        Job?               @relation(fields: [jobId], references: [id])
+  status     String             @default("open")
+  notes      String?
+  jdFileUrl  String?            // Supabase Storage path to the uploaded job description
+  jdFileName String?            // original filename for display
+  candidates ProjectCandidate[]
+  createdAt  DateTime           @default(now())
+}
+
+model ProjectCandidate {
+  projectId   String
+  candidateId String
+  stage       String    @default("Pursuing")
+  note        String?
+  addedAt     DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@id([projectId, candidateId])
+}
+
+model Contact {
+  id        String     @id @default(cuid())
+  name      String
+  title     String?
+  email     String?
+  companyId String
+  company   Company    @relation(fields: [companyId], references: [id])
+  outreach  Outreach[]
+  createdAt DateTime   @default(now())
+}
+
+model Candidate {
+  id              String                       @id @default(cuid())
+  name            String
+  currentTitle    String?
+  location        String?
+  compExpect      String?
+  linkedinUrl     String?
+  linkedinRawText String?
+  resumeUrl       String?
+  summary         String?
+  embedding       Unsupported("vector(1536)")?
+  notes           Note[]
+  transcripts     Transcript[]
+  tags            CandidateTag[]
+  interactions    Interaction[]
+  matches         Match[]
+  projects        ProjectCandidate[]
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  body        String
+  createdAt   DateTime  @default(now())
+}
+
+model Transcript {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  rawText     String
+  summary     String?
+  callDate    DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+}
+
+model Tag {
+  id         String         @id @default(cuid())
+  label      String         @unique
+  kind       String
+  candidates CandidateTag[]
+}
+
+model CandidateTag {
+  candidateId String
+  tagId       String
+  source      String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  tag         Tag       @relation(fields: [tagId], references: [id])
+
+  @@id([candidateId, tagId])
+}
+
+model Interaction {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+  kind        String
+  summary     String?
+  occurredAt  DateTime  @default(now())
+}
+
+model Job {
+  id                String     @id @default(cuid())
+  title             String
+  companyId         String?
+  company           Company?   @relation(fields: [companyId], references: [id])
+  sourceUrl         String?
+  rawText           String
+  requirements      String?
+  embedding         Unsupported("vector(1536)")?
+  // GTM job-board monitor fields — null/false for manually pasted Phase 2 jobs
+  externalId        String?    @unique // ats+slug+job_id, dedupe key for re-polling
+  department        String?
+  location          String?
+  postedAt          DateTime?
+  isGtmOpportunity  Boolean    @default(false) // one of the curated top-N picks, not just any GTM-matching posting
+  isLeadershipRole  Boolean    @default(false)
+  discoveredAt      DateTime?
+  matches           Match[]
+  outreach          Outreach[]
+  project           Project?
+  createdAt         DateTime   @default(now())
+}
+
+model Match {
+  id          String    @id @default(cuid())
+  jobId       String
+  candidateId String
+  score       Float
+  rationale   String?
+  job         Job       @relation(fields: [jobId], references: [id])
+  candidate   Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([jobId, candidateId])
+}
+
+model Outreach {
+  id        String   @id @default(cuid())
+  jobId     String
+  contactId String?
+  subject   String
+  body      String
+  status    String   @default("draft")
+  job       Job      @relation(fields: [jobId], references: [id])
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  createdAt DateTime @default(now())
+}
