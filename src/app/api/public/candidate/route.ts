@@ -36,12 +36,12 @@ export async function POST(req: Request) {
   const name = String(form.get("name") ?? "").trim();
   const email = String(form.get("email") ?? "").trim();
   const linkedinUrl = String(form.get("linkedinUrl") ?? "").trim();
-  const file = form.get("resume") as File | null;
+  const file = form.get("resume");
 
   if (!name || name.length > 200) return fail(400, "Please enter your name.");
   if (!isValidEmail(email)) return fail(400, "Please enter a valid email.");
   if (linkedinUrl.length > 300) return fail(400, "That LinkedIn URL looks too long.");
-  if (!file || file.size === 0) return fail(400, "Please attach your resume.");
+  if (!(file instanceof File) || file.size === 0) return fail(400, "Please attach your resume.");
   if (file.size > MAX_FILE_BYTES) return fail(400, "Resume must be under 8MB.");
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   if (!isPdf) return fail(400, "Please upload your resume as a PDF.");
