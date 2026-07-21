@@ -52,7 +52,7 @@ export async function parseResume(
       : [{ type: "text", text: `${instruction} Resume text: ${input.text}` }];
 
   const msg = await anthropic.messages.create({
-    model: SMART,
+    model: CHEAP,
     max_tokens: 1024,
     messages: [{ role: "user", content }],
   });
@@ -72,7 +72,7 @@ export async function parseLinkedIn(
   existingSkills: string[]
 ): Promise<LinkedInParse> {
   const msg = await anthropic.messages.create({
-    model: SMART,
+    model: CHEAP,
     max_tokens: 1024,
     messages: [
       {
@@ -106,7 +106,7 @@ export interface TranscriptParse { summary: string; tags: ExtractedTag[]; }
 
 export async function summarizeTranscript(rawText: string): Promise<TranscriptParse> {
   const msg = await anthropic.messages.create({
-    model: SMART,
+    model: CHEAP,
     max_tokens: 1024,
     messages: [
       {
@@ -127,7 +127,7 @@ export async function matchRationale(
   candidateSummary: string
 ): Promise<string> {
   const msg = await anthropic.messages.create({
-    model: SMART,
+    model: CHEAP,
     max_tokens: 256,
     messages: [
       {
@@ -392,7 +392,7 @@ export async function analyzeJobDescription(
       : [{ type: "text", text: `${instruction}\n\nJob description:\n${input.text}` }];
 
   const msg = await anthropic.messages.create({
-    model: SMART,
+    model: CHEAP,
     max_tokens: 1024,
     messages: [{ role: "user", content }],
   });
