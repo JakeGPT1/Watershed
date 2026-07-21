@@ -53,7 +53,7 @@ export default async function CandidatePage(props: {
   const availableProjects = await prisma.project.findMany({
     where: { id: { notIn: memberProjectIds }, status: { not: "closed" } },
     orderBy: { createdAt: "desc" },
-    select: { id: true, title: true },
+    select: { id: true, title: true, company: { select: { name: true } } },
   });
 
   const timeline = [
@@ -153,7 +153,7 @@ export default async function CandidatePage(props: {
                 </option>
                 {availableProjects.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.title}
+                    {p.company ? `${p.title} - ${p.company.name}` : p.title}
                   </option>
                 ))}
               </select>
