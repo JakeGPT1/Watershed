@@ -104,18 +104,27 @@ export async function tagNote(body: string): Promise<ExtractedTag[]> {
 
 export interface TranscriptParse { summary: string; tags: ExtractedTag[]; }
 
-export async function summarizeTranscript(rawText: string): Promise<TranscriptParse> {
+export async function summarizeTranscript(
+  input: { text: string } | { pdfBase64: string }
+): Promise<TranscriptParse> {
+  const instruction =
+    'You are reviewing a recruiter\'s call transcript with a candidate. Return JSON only: { "summary": string (<=60 words, key facts: motivation, comp expectations, availability, concerns, standout skills), "tags": [{ "label": string (lowercase, short), "kind": "skill"|"seniority"|"status"|"location"|"comp"|"vertical"|"other" }] }. Ignore filler/small talk.';
+
+  const content: Anthropic.ContentBlockParam[] =
+    "pdfBase64" in input
+      ? [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: input.pdfBase64 },
+          },
+          { type: "text", text: instruction },
+        ]
+      : [{ type: "text", text: `${instruction} Transcript: ${input.text}` }];
+
   const msg = await anthropic.messages.create({
     model: CHEAP,
     max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content:
-          'You are reviewing a recruiter\'s call transcript with a candidate. Return JSON only: { "summary": string (<=60 words, key facts: motivation, comp expectations, availability, concerns, standout skills), "tags": [{ "label": string (lowercase, short), "kind": "skill"|"seniority"|"status"|"location"|"comp"|"vertical"|"other" }] }. Ignore filler/small talk. Transcript: ' +
-          rawText,
-      },
-    ],
+    messages: [{ role: "user", content }],
   });
   const parsed = parseJson<TranscriptParse>(textOf(msg));
   return { summary: parsed.summary ?? "", tags: parsed.tags ?? [] };

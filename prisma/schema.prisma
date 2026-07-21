@@ -97,8 +97,10 @@ model Transcript {
   id          String    @id @default(cuid())
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id])
-  rawText     String
+  rawText     String?
   summary     String?
+  fileUrl     String?
+  fileName    String?
   callDate    DateTime  @default(now())
   createdAt   DateTime  @default(now())
 }

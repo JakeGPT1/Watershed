@@ -4,14 +4,16 @@ import { prisma } from "@/lib/prisma";
 import {
   addNote,
   addTranscript,
-  pasteLinkedIn,
   uploadResume,
   addManualTag,
   removeTag,
   getResumeSignedUrl,
+  getTranscriptSignedUrl,
+  deleteCandidate,
 } from "../actions";
 import { addCandidateToProjectFromCandidate } from "../../projects/actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
+import { DeleteCandidateButton } from "../_components/DeleteCandidateButton";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
@@ -38,6 +40,13 @@ export default async function CandidatePage(props: {
   if (!c) notFound();
 
   const resumeLink = c.resumeUrl ? await getResumeSignedUrl(id) : null;
+  const transcriptLinks = Object.fromEntries(
+    await Promise.all(
+      c.transcripts
+        .filter((t) => t.fileUrl)
+        .map(async (t) => [t.id, await getTranscriptSignedUrl(t.id)] as const)
+    )
+  );
 
   // Projects this candidate is not already in — for the "add to project" control.
   const memberProjectIds = c.projects.map((pc) => pc.projectId);
@@ -62,15 +71,15 @@ export default async function CandidatePage(props: {
           <div>
             <h1 className="text-2xl font-semibold text-stone-900">{c.name}</h1>
             <p className="mt-1 text-sm text-stone-600">
-              {[c.currentTitle, c.location, c.compExpect].filter(Boolean).join(" · ") || "No details yet"}
+              {[c.currentTitle, c.location].filter(Boolean).join(" · ") || "No details yet"}
             </p>
+            {c.compExpect && (
+              <p className="mt-1 text-sm text-stone-700">
+                <span className="font-medium">Comp expectation:</span> {c.compExpect}
+              </p>
+            )}
             {c.summary && <p className="mt-2 text-sm text-stone-700">{c.summary}</p>}
             <div className="mt-3 flex gap-4 text-sm">
-              {c.linkedinUrl && (
-                <a href={c.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
-                  View LinkedIn ↗
-                </a>
-              )}
               {resumeLink && (
                 <a href={resumeLink} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
                   View resume ↗
@@ -78,9 +87,22 @@ export default async function CandidatePage(props: {
               )}
             </div>
           </div>
-          <Link href={`/candidates/${id}/edit`} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50">
-            Edit
-          </Link>
+          <div className="flex shrink-0 items-center gap-2">
+            {c.linkedinUrl && (
+              <a
+                href={c.linkedinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50"
+              >
+                LinkedIn ↗
+              </a>
+            )}
+            <Link href={`/candidates/${id}/edit`} className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50">
+              Edit
+            </Link>
+            <DeleteCandidateButton action={deleteCandidate.bind(null, id)} name={c.name} />
+          </div>
         </div>
 
         {/* Tags */}
@@ -153,7 +175,7 @@ export default async function CandidatePage(props: {
       </div>
 
       {/* Enrichment actions */}
-      <div className="mb-6 grid gap-4 md:grid-cols-3">
+      <div className="mb-6 grid gap-4 md:grid-cols-2">
         <details className="rounded-xl border border-stone-200 bg-white p-4">
           <summary className="cursor-pointer text-sm font-medium text-stone-800">Upload resume</summary>
           <form action={uploadResume.bind(null, id)} className="mt-3 space-y-2">
@@ -164,19 +186,12 @@ export default async function CandidatePage(props: {
         </details>
 
         <details className="rounded-xl border border-stone-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-medium text-stone-800">Paste LinkedIn</summary>
-          <form action={pasteLinkedIn.bind(null, id)} className="mt-3 space-y-2">
-            <textarea name="linkedinText" rows={5} required placeholder="Copy the About / Experience / Skills text from their profile…" className={field} />
-            <button className={btn}>Extract &amp; Merge</button>
-          </form>
-        </details>
-
-        <details className="rounded-xl border border-stone-200 bg-white p-4">
-          <summary className="cursor-pointer text-sm font-medium text-stone-800">Paste transcript</summary>
+          <summary className="cursor-pointer text-sm font-medium text-stone-800">Upload transcript</summary>
           <form action={addTranscript.bind(null, id)} className="mt-3 space-y-2">
-            <textarea name="rawText" rows={5} required placeholder="Paste the call transcript…" className={field} />
+            <input type="file" name="transcript" accept=".pdf,.txt,.md,.vtt,application/pdf,text/plain" required className="block w-full text-xs" />
             <input type="date" name="callDate" className={field} />
-            <button className={btn}>Save &amp; Summarize</button>
+            <button className={btn}>Upload &amp; Summarize</button>
+            <p className="text-xs text-stone-500">PDF or text. AI summarizes and tags automatically.</p>
           </form>
         </details>
       </div>
@@ -207,12 +222,26 @@ export default async function CandidatePage(props: {
             {item.kind === "transcript" && (
               <div>
                 <p className="text-sm text-stone-700">{item.transcript.summary ?? "(no summary)"}</p>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-xs text-blue-700">Show full transcript</summary>
-                  <p className="mt-2 whitespace-pre-wrap rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
-                    {item.transcript.rawText}
-                  </p>
-                </details>
+                <div className="mt-2 flex items-center gap-3">
+                  {item.transcript.rawText && (
+                    <details>
+                      <summary className="cursor-pointer text-xs text-blue-700">Show full transcript</summary>
+                      <p className="mt-2 whitespace-pre-wrap rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
+                        {item.transcript.rawText}
+                      </p>
+                    </details>
+                  )}
+                  {transcriptLinks[item.transcript.id] && (
+                    <a
+                      href={transcriptLinks[item.transcript.id]!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-700 hover:underline"
+                    >
+                      Download transcript ↗
+                    </a>
+                  )}
+                </div>
               </div>
             )}
             {item.kind === "interaction" && (

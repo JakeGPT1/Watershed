@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/supabase/server";
-import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
-import { parseLinkedIn, tagNote, summarizeTranscript } from "@/lib/ai";
-import { applyAiTags, skillsToTags } from "@/lib/tags";
+import { createAdminClient, RESUMES_BUCKET, TRANSCRIPTS_BUCKET } from "@/lib/supabase/admin";
+import { tagNote, summarizeTranscript } from "@/lib/ai";
+import { applyAiTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding } from "@/lib/embedding";
 import { ingestResumeFile } from "@/lib/publicIntake";
 import { failTo } from "@/lib/formError";
@@ -42,6 +42,23 @@ export async function createCandidate(formData: FormData) {
       linkedinUrl,
     },
   });
+
+  const file = formData.get("resume") as File | null;
+  if (file && file.size > 0) {
+    if (file.size > 10 * 1024 * 1024) failTo("/candidates/new", "Resume must be under 10MB");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    try {
+      await ingestResumeFile(candidate.id, { buffer, type: file.type, name: file.name });
+    } catch {
+      // Candidate is already created; don't lose it on a parse failure —
+      // send the owner to the candidate page where they can retry the upload.
+      redirect(
+        `/candidates/${candidate.id}?error=${encodeURIComponent(
+          "Candidate created, but resume parsing failed — re-upload from here."
+        )}`
+      );
+    }
+  }
   redirect(`/candidates/${candidate.id}`);
 }
 
@@ -90,43 +107,6 @@ export async function uploadResume(candidateId: string, formData: FormData) {
   revalidatePath(pagePath);
 }
 
-export async function pasteLinkedIn(candidateId: string, formData: FormData) {
-  await requireOwner();
-  const pagePath = `/candidates/${candidateId}`;
-  const rawText = String(formData.get("linkedinText") ?? "").trim();
-  if (rawText.length < 40) failTo(pagePath, "Paste the profile text (About/Experience/Skills)");
-
-  const existing = await prisma.candidate.findUniqueOrThrow({
-    where: { id: candidateId },
-    include: { tags: { include: { tag: true } } },
-  });
-
-  let parsed;
-  try {
-    parsed = await parseLinkedIn(
-      rawText,
-      existing.summary,
-      existing.tags.map((t) => t.tag.label)
-    );
-  } catch (e) {
-    failTo(pagePath, e instanceof Error ? e.message : "LinkedIn parsing failed");
-  }
-
-  // Merge, don't overwrite: fill empty fields; summary only if model returned an improvement
-  await prisma.candidate.update({
-    where: { id: candidateId },
-    data: {
-      linkedinRawText: rawText,
-      currentTitle: existing.currentTitle ?? parsed.currentTitle,
-      location: existing.location ?? parsed.location,
-      summary: parsed.summary ?? existing.summary,
-    },
-  });
-  await applyAiTags(candidateId, skillsToTags(parsed.skills));
-  await recomputeCandidateEmbedding(candidateId).catch(console.error);
-  revalidatePath(pagePath);
-}
-
 export async function addNote(candidateId: string, formData: FormData) {
   await requireOwner();
   const pagePath = `/candidates/${candidateId}`;
@@ -143,20 +123,37 @@ export async function addNote(candidateId: string, formData: FormData) {
 export async function addTranscript(candidateId: string, formData: FormData) {
   await requireOwner();
   const pagePath = `/candidates/${candidateId}`;
-  const rawText = String(formData.get("rawText") ?? "").trim();
-  if (rawText.length < 40) failTo(pagePath, "Transcript looks too short");
+  const file = formData.get("transcript") as File | null;
+  if (!file || file.size === 0) failTo(pagePath, "Attach a transcript file");
+  if (file.size > 10 * 1024 * 1024) failTo(pagePath, "Transcript must be under 10MB");
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  const isText = file.type.startsWith("text/") || /\.(txt|md|vtt)$/i.test(file.name);
+  if (!isPdf && !isText) failTo(pagePath, "Upload a PDF or plain-text transcript");
+
   const callDateRaw = String(formData.get("callDate") ?? "").trim();
   const callDate = callDateRaw ? new Date(callDateRaw) : new Date();
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Store original for later download.
+  const admin = createAdminClient();
+  const path = `${candidateId}/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+  const { error: upErr } = await admin.storage
+    .from(TRANSCRIPTS_BUCKET)
+    .upload(path, buffer, { contentType: file.type || "application/octet-stream" });
+  if (upErr) failTo(pagePath, `Storage upload failed: ${upErr.message}`);
+
+  const rawText = isText ? buffer.toString("utf-8") : null;
+
   let parsed;
   try {
-    parsed = await summarizeTranscript(rawText);
+    parsed = await summarizeTranscript(isPdf ? { pdfBase64: buffer.toString("base64") } : { text: rawText! });
   } catch (e) {
     failTo(pagePath, e instanceof Error ? e.message : "Transcript summarization failed");
   }
 
   await prisma.transcript.create({
-    data: { candidateId, rawText, summary: parsed.summary, callDate },
+    data: { candidateId, rawText, summary: parsed.summary, fileUrl: path, fileName: file.name, callDate },
   });
   await applyAiTags(candidateId, parsed.tags);
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
@@ -186,6 +183,48 @@ export async function removeTag(candidateId: string, tagId: string) {
   });
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
   revalidatePath(`/candidates/${candidateId}`);
+}
+
+export async function getTranscriptSignedUrl(transcriptId: string): Promise<string | null> {
+  await requireOwner();
+  const t = await prisma.transcript.findUnique({ where: { id: transcriptId } });
+  if (!t?.fileUrl) return null;
+  const admin = createAdminClient();
+  const { data } = await admin.storage.from(TRANSCRIPTS_BUCKET).createSignedUrl(t.fileUrl, 3600);
+  return data?.signedUrl ?? null;
+}
+
+export async function deleteCandidate(candidateId: string) {
+  await requireOwner();
+  // Collect storage paths first (need them before the rows are gone).
+  const c = await prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { transcripts: { select: { fileUrl: true } } },
+  });
+  if (!c) redirect("/candidates");
+
+  await prisma.$transaction([
+    prisma.match.deleteMany({ where: { candidateId } }),
+    prisma.candidateTag.deleteMany({ where: { candidateId } }),
+    prisma.note.deleteMany({ where: { candidateId } }),
+    prisma.transcript.deleteMany({ where: { candidateId } }),
+    prisma.interaction.deleteMany({ where: { candidateId } }),
+    prisma.projectCandidate.deleteMany({ where: { candidateId } }),
+    prisma.candidate.delete({ where: { id: candidateId } }),
+  ]);
+
+  // Best-effort storage cleanup — never block the delete on a storage hiccup.
+  try {
+    const admin = createAdminClient();
+    if (c.resumeUrl) await admin.storage.from(RESUMES_BUCKET).remove([c.resumeUrl]);
+    const tPaths = c.transcripts.map((t) => t.fileUrl).filter(Boolean) as string[];
+    if (tPaths.length) await admin.storage.from(TRANSCRIPTS_BUCKET).remove(tPaths);
+  } catch (e) {
+    console.error("deleteCandidate: storage cleanup failed (rows already deleted)", e);
+  }
+
+  revalidatePath("/candidates");
+  redirect("/candidates");
 }
 
 export async function getResumeSignedUrl(candidateId: string): Promise<string | null> {

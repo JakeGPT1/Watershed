@@ -52,6 +52,28 @@ export async function createProject(formData: FormData) {
   redirect(`/projects/${project.id}`);
 }
 
+export async function renameProject(projectId: string, formData: FormData) {
+  await requireOwner();
+  const pagePath = `/projects/${projectId}`;
+  const title = String(formData.get("title") ?? "").trim();
+  if (!title) failTo(pagePath, "Title is required");
+
+  const companyName = String(formData.get("companyName") ?? "").trim();
+  let companyId: string | null = null;
+  if (companyName) {
+    const existing = await prisma.company.findFirst({
+      where: { name: { equals: companyName, mode: "insensitive" } },
+    });
+    const company = existing ?? (await prisma.company.create({ data: { name: companyName } }));
+    companyId = company.id;
+  }
+
+  await prisma.project.update({ where: { id: projectId }, data: { title, companyId } });
+  revalidatePath(pagePath);
+  revalidatePath("/projects");
+  redirect(pagePath);
+}
+
 export async function updateProjectStatus(projectId: string, formData: FormData) {
   await requireOwner();
   const status = String(formData.get("status") ?? "");

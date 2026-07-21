@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { STAGES } from "@/lib/stages";
 import {
+  renameProject,
   updateProjectStatus,
   setStage,
   setProjectCandidateNote,
@@ -61,6 +62,27 @@ export default async function ProjectPage(props: {
             <span>·</span>
             <span>{project.candidates.length} candidates</span>
           </div>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs text-stone-500">Rename project</summary>
+            <form action={renameProject.bind(null, id)} className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                name="title"
+                defaultValue={project.title}
+                required
+                placeholder="Title"
+                className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm outline-none focus:border-stone-500"
+              />
+              <input
+                name="companyName"
+                defaultValue={project.company?.name ?? ""}
+                placeholder="Company"
+                className="rounded-lg border border-stone-300 bg-white px-2 py-1 text-sm outline-none focus:border-stone-500"
+              />
+              <button className="rounded-lg bg-stone-900 px-3 py-1 text-xs font-medium text-white hover:bg-stone-700">
+                Save
+              </button>
+            </form>
+          </details>
         </div>
         <Link
           href={`/projects/${id}/add`}

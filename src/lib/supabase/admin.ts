@@ -11,3 +11,4 @@ export function createAdminClient() {
 
 export const RESUMES_BUCKET = "resumes";
 export const JD_BUCKET = "job-descriptions";
+export const TRANSCRIPTS_BUCKET = "transcripts";
