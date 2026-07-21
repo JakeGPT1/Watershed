@@ -127,7 +127,7 @@ export async function matchRationale(
   candidateSummary: string
 ): Promise<string> {
   const msg = await anthropic.messages.create({
-    model: CHEAP,
+    model: SMART,
     max_tokens: 256,
     messages: [
       {
@@ -392,7 +392,7 @@ export async function analyzeJobDescription(
       : [{ type: "text", text: `${instruction}\n\nJob description:\n${input.text}` }];
 
   const msg = await anthropic.messages.create({
-    model: CHEAP,
+    model: SMART,
     max_tokens: 1024,
     messages: [{ role: "user", content }],
   });
