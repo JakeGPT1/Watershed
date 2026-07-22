@@ -1,33 +1,39 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
-import { parseResume, extractJobFromJD, researchCompanyFunding, type FundingResearch } from "@/lib/ai";
+import { parseResume, extractJobFromJD, researchCompanyFunding } from "@/lib/ai";
 import { applyAiTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding, setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
 
-const FUNDING_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+const FUNDING_FRESH_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
-// Candidates cluster at the same employers — cache the (context-free) company-level result so
-// a repeat employer costs zero API calls. Context only matters for disambiguating a shared
-// name, and an ambiguous name resolves to "unknown" either way, which is cached too (so it's
-// never re-searched).
-async function getCompanyFundingCached(
+/**
+ * Find-or-create the Company for a candidate's current employer, and ensure it has a funding
+ * stage on file — reusing a fresh (<90d) stored value with ZERO API calls, or researching once
+ * and storing the result on the Company row (the single source of truth; no separate cache
+ * table). A low-confidence research result is stored as "unknown" so every consumer of
+ * `fundingStage` can use one simple rule: `stage !== "unknown"` means tag-worthy.
+ */
+async function ensureCompanyFunding(
   companyName: string,
   context: { title?: string | null; location?: string | null }
-): Promise<FundingResearch> {
-  const key = companyName.trim().toLowerCase();
-  const cached = await prisma.fundingCache.findUnique({ where: { companyKey: key } });
-  if (cached && Date.now() - cached.checkedAt.getTime() < FUNDING_CACHE_TTL_MS) {
-    return { stage: cached.stage as FundingResearch["stage"], confidence: cached.confidence as FundingResearch["confidence"], basis: cached.basis };
-  }
+): Promise<string | null> {
+  const existingCo = await prisma.company.findFirst({
+    where: { name: { equals: companyName.trim(), mode: "insensitive" } },
+  });
+  const company = existingCo ?? (await prisma.company.create({ data: { name: companyName.trim() } }));
+
+  const isFresh =
+    company.fundingCheckedAt && Date.now() - company.fundingCheckedAt.getTime() < FUNDING_FRESH_MS;
+  if (isFresh) return company.fundingStage;
 
   const fresh = await researchCompanyFunding(companyName, context);
-  await prisma.fundingCache.upsert({
-    where: { companyKey: key },
-    update: { stage: fresh.stage, confidence: fresh.confidence, basis: fresh.basis, checkedAt: new Date() },
-    create: { companyKey: key, stage: fresh.stage, confidence: fresh.confidence, basis: fresh.basis },
+  const stage = fresh.confidence === "high" ? fresh.stage : "unknown";
+  await prisma.company.update({
+    where: { id: company.id },
+    data: { fundingStage: stage, fundingBasis: fresh.basis, fundingCheckedAt: new Date() },
   });
-  return fresh;
+  return stage;
 }
 
 // Shared core behind both the owner's "Upload resume" action and the public
@@ -69,8 +75,8 @@ export async function ingestResumeFile(
 
   if (currentCompany) {
     try {
-      const funding = await Promise.race([
-        getCompanyFundingCached(currentCompany, {
+      const stage = await Promise.race([
+        ensureCompanyFunding(currentCompany, {
           title: existing.currentTitle ?? parsed.currentTitle,
           location: existing.location ?? parsed.location,
         }),
@@ -78,12 +84,12 @@ export async function ingestResumeFile(
           setTimeout(() => rej(new Error("funding research timeout")), 25_000)
         ),
       ]);
-      console.log(`funding research for "${currentCompany}":`, funding);
-      if (funding.stage !== "unknown" && funding.confidence === "high") {
-        await applyAiTags(candidateId, [{ label: funding.stage, kind: "funding" }]);
+      console.log(`funding stage for "${currentCompany}":`, stage);
+      if (stage && stage !== "unknown") {
+        await applyAiTags(candidateId, [{ label: stage, kind: "funding" }]);
       }
     } catch (e) {
-      console.error("funding research failed (non-fatal)", e);
+      console.error("company funding flow failed (non-fatal)", e);
     }
   }
 

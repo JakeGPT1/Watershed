@@ -31,6 +31,7 @@ export default async function CompaniesPage() {
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Industry</th>
+                <th className="px-4 py-3">Funding</th>
                 <th className="px-4 py-3">Contacts</th>
               </tr>
             </thead>
@@ -50,6 +51,15 @@ export default async function CompaniesPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-stone-600">{c.industry ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {c.fundingStage ? (
+                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                        {c.fundingStage}
+                      </span>
+                    ) : (
+                      <span className="text-stone-400">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-stone-600">{c._count.contacts}</td>
                 </tr>
               ))}

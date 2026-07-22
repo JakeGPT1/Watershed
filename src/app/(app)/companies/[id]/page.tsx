@@ -39,8 +39,19 @@ export default async function CompanyPage(props: {
                   GTM target
                 </span>
               )}
+              {company.fundingStage && (
+                <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                  {company.fundingStage}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-stone-600">{company.industry ?? "No industry set"}</p>
+            {company.fundingStage && (
+              <p className="mt-1 text-xs text-stone-400">
+                {company.fundingBasis}
+                {company.fundingCheckedAt && ` · checked ${company.fundingCheckedAt.toLocaleDateString()}`}
+              </p>
+            )}
             {company.website && (
               <a
                 href={company.website}
@@ -69,6 +80,22 @@ export default async function CompanyPage(props: {
             <div>
               <label className="mb-1 block text-xs font-medium text-stone-700">Website</label>
               <input name="website" defaultValue={company.website ?? ""} className={field} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-stone-700">Funding stage</label>
+              <select name="fundingStage" defaultValue={company.fundingStage ?? ""} className={field}>
+                <option value="">Not set</option>
+                <option value="pre-seed">pre-seed</option>
+                <option value="seed">seed</option>
+                <option value="series-a">series-a</option>
+                <option value="series-b">series-b</option>
+                <option value="series-c">series-c</option>
+                <option value="series-d-plus">series-d-plus</option>
+                <option value="public">public</option>
+                <option value="bootstrapped">bootstrapped</option>
+                <option value="pe-owned">pe-owned</option>
+                <option value="acquired">acquired</option>
+              </select>
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-stone-700">Notes</label>

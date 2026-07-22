@@ -9,18 +9,21 @@ datasource db {
 }
 
 model Company {
-  id          String    @id @default(cuid())
-  name        String
-  industry    String?
-  website     String?
-  notes       String?
-  isGtmTarget Boolean   @default(false) // tracked by the GTM job-board monitor
-  atsType     String?   // "greenhouse" | "lever" | "ashby" | "unknown"
-  atsSlug     String?
-  contacts    Contact[]
-  jobs        Job[]
-  projects    Project[]
-  createdAt   DateTime  @default(now())
+  id               String    @id @default(cuid())
+  name             String
+  industry         String?
+  website          String?
+  notes            String?
+  isGtmTarget      Boolean   @default(false) // tracked by the GTM job-board monitor
+  atsType          String?   // "greenhouse" | "lever" | "ashby" | "unknown"
+  atsSlug          String?
+  fundingStage     String?   // controlled vocab: pre-seed … series-d-plus, public, bootstrapped, pe-owned, acquired, unknown
+  fundingBasis     String?   // one-line citation from the research
+  fundingCheckedAt DateTime?
+  contacts         Contact[]
+  jobs             Job[]
+  projects         Project[]
+  createdAt        DateTime  @default(now())
 }
 
 model Project {
@@ -104,14 +107,6 @@ model Transcript {
   fileName    String?
   callDate    DateTime  @default(now())
   createdAt   DateTime  @default(now())
-}
-
-model FundingCache {
-  companyKey String   @id
-  stage      String
-  confidence String
-  basis      String
-  checkedAt  DateTime @default(now())
 }
 
 model Tag {

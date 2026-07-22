@@ -27,6 +27,10 @@ export async function updateCompany(companyId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) failTo(`/companies/${companyId}`, "Name is required");
 
+  const existing = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
+  const fundingStage = String(formData.get("fundingStage") ?? "").trim() || null;
+  const fundingChanged = fundingStage !== existing.fundingStage;
+
   await prisma.company.update({
     where: { id: companyId },
     data: {
@@ -34,6 +38,12 @@ export async function updateCompany(companyId: string, formData: FormData) {
       industry: String(formData.get("industry") ?? "").trim() || null,
       website: String(formData.get("website") ?? "").trim() || null,
       notes: String(formData.get("notes") ?? "").trim() || null,
+      fundingStage,
+      // Only stamp a manual-override basis/date when the owner actually changed the value —
+      // resubmitting the form unchanged must not reset the research-derived basis/checkedAt.
+      ...(fundingChanged
+        ? { fundingBasis: "Set manually by owner", fundingCheckedAt: new Date() }
+        : {}),
     },
   });
   revalidatePath(`/companies/${companyId}`);
