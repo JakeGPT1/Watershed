@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { updateCompany, deleteCompany, addContact, updateContact, removeContact } from "../actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
 import { DeleteCompanyButton } from "../_components/DeleteCompanyButton";
+import { companyKey } from "@/lib/companies";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
@@ -26,6 +27,16 @@ export default async function CompanyPage(props: {
     },
   });
   if (!company) notFound();
+
+  // Employees: candidates whose current employer matches this company, by normalized name —
+  // derived, not stored rows, so a candidate never lands in the hiring-manager/BD-outreach flow.
+  const candidatesWithCompany = await prisma.candidate.findMany({
+    where: { currentCompany: { not: null } },
+    select: { id: true, name: true, currentTitle: true, currentCompany: true },
+    orderBy: { name: "asc" },
+  });
+  const key = companyKey(company.name);
+  const employees = candidatesWithCompany.filter((c) => companyKey(c.currentCompany!) === key);
 
   return (
     <div className="max-w-3xl">
@@ -117,7 +128,7 @@ export default async function CompanyPage(props: {
       {/* Contacts */}
       <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5">
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-500">
-          Hiring manager contacts
+          Hiring Managers
         </h2>
 
         {company.contacts.length === 0 ? (
@@ -170,6 +181,30 @@ export default async function CompanyPage(props: {
             <button className={`col-span-3 ${btn}`}>Add Contact</button>
           </form>
         </details>
+      </div>
+
+      {/* Employees — derived from candidates' currentCompany, not stored rows */}
+      <div className="mb-6 rounded-xl border border-stone-200 bg-white p-5">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-500">
+          Employees
+        </h2>
+        {employees.length === 0 ? (
+          <p className="text-sm text-stone-400">No candidates on file here yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {employees.map((e) => (
+              <div key={e.id}>
+                <Link href={`/candidates/${e.id}`} className="text-sm font-medium text-stone-900 hover:underline">
+                  {e.name}
+                </Link>
+                {e.currentTitle && <p className="text-xs text-stone-500">{e.currentTitle}</p>}
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="mt-3 text-xs text-stone-400">
+          Pulled from candidates whose current company is {company.name}.
+        </p>
       </div>
 
       {/* Linked projects + jobs */}

@@ -9,6 +9,7 @@ import { summarizeTranscript } from "@/lib/ai";
 import { recomputeCandidateEmbedding } from "@/lib/embedding";
 import { ingestResumeFile } from "@/lib/publicIntake";
 import { failTo } from "@/lib/formError";
+import { findOrCreateCompany } from "@/lib/companies";
 
 const LINKEDIN_RE = /^https?:\/\/(www\.)?linkedin\.com\/in\/[^\s]+$/i;
 
@@ -74,18 +75,29 @@ export async function updateCandidate(candidateId: string, formData: FormData) {
     failTo(editPath, e instanceof Error ? e.message : "Invalid LinkedIn URL");
   }
 
+  const currentCompany = String(formData.get("currentCompany") ?? "").trim() || null;
+
   await prisma.candidate.update({
     where: { id: candidateId },
     data: {
       name,
       currentTitle: String(formData.get("currentTitle") ?? "").trim() || null,
-      currentCompany: String(formData.get("currentCompany") ?? "").trim() || null,
+      currentCompany,
       location: String(formData.get("location") ?? "").trim() || null,
       compExpect: String(formData.get("compExpect") ?? "").trim() || null,
       linkedinUrl,
       summary: String(formData.get("summary") ?? "").trim() || null,
     },
   });
+
+  // A manually-typed employer should show up in the Companies list too, same as a
+  // resume-derived one — create the Company row if it doesn't exist yet (never blocks the save).
+  if (currentCompany) {
+    await findOrCreateCompany(currentCompany).catch((e) =>
+      console.error("updateCandidate: findOrCreateCompany failed (non-fatal)", e)
+    );
+  }
+
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
   revalidatePath(`/candidates/${candidateId}`);
   redirect(`/candidates/${candidateId}`);

@@ -1,11 +1,24 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { companyKey } from "@/lib/companies";
 
 export default async function CompaniesPage() {
   const companies = await prisma.company.findMany({
     include: { _count: { select: { contacts: true, jobs: true, projects: true } } },
     orderBy: { name: "asc" },
   });
+
+  // Employee counts per company, derived from candidates' currentCompany (normalized match) —
+  // same logic as the company detail page's Employees section.
+  const candidatesWithCompany = await prisma.candidate.findMany({
+    where: { currentCompany: { not: null } },
+    select: { currentCompany: true },
+  });
+  const empCounts = new Map<string, number>();
+  for (const cand of candidatesWithCompany) {
+    const k = companyKey(cand.currentCompany!);
+    empCounts.set(k, (empCounts.get(k) ?? 0) + 1);
+  }
 
   return (
     <div>
@@ -60,7 +73,9 @@ export default async function CompaniesPage() {
                       <span className="text-stone-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-stone-600">{c._count.contacts}</td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {c._count.contacts + (empCounts.get(companyKey(c.name)) ?? 0)}
+                  </td>
                 </tr>
               ))}
             </tbody>
