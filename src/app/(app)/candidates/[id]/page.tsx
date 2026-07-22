@@ -71,7 +71,14 @@ export default async function CandidatePage(props: {
           <div>
             <h1 className="text-2xl font-semibold text-stone-900">{c.name}</h1>
             <p className="mt-1 text-sm text-stone-600">
-              {[c.currentTitle, c.location].filter(Boolean).join(" · ") || "No details yet"}
+              {[
+                c.currentTitle && c.currentCompany
+                  ? `${c.currentTitle} @ ${c.currentCompany}`
+                  : c.currentTitle || c.currentCompany,
+                c.location,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "No details yet"}
             </p>
             {c.compExpect && (
               <p className="mt-1 text-sm text-stone-700">

@@ -5,8 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/supabase/server";
 import { createAdminClient, RESUMES_BUCKET, TRANSCRIPTS_BUCKET } from "@/lib/supabase/admin";
-import { tagNote, summarizeTranscript } from "@/lib/ai";
-import { applyAiTags } from "@/lib/tags";
+import { summarizeTranscript } from "@/lib/ai";
 import { recomputeCandidateEmbedding } from "@/lib/embedding";
 import { ingestResumeFile } from "@/lib/publicIntake";
 import { failTo } from "@/lib/formError";
@@ -80,6 +79,7 @@ export async function updateCandidate(candidateId: string, formData: FormData) {
     data: {
       name,
       currentTitle: String(formData.get("currentTitle") ?? "").trim() || null,
+      currentCompany: String(formData.get("currentCompany") ?? "").trim() || null,
       location: String(formData.get("location") ?? "").trim() || null,
       compExpect: String(formData.get("compExpect") ?? "").trim() || null,
       linkedinUrl,
@@ -114,8 +114,6 @@ export async function addNote(candidateId: string, formData: FormData) {
   if (!body) failTo(pagePath, "Note is empty");
 
   await prisma.note.create({ data: { candidateId, body } });
-  const tags = await tagNote(body).catch(() => []);
-  await applyAiTags(candidateId, tags);
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
   revalidatePath(pagePath);
 }
@@ -155,7 +153,6 @@ export async function addTranscript(candidateId: string, formData: FormData) {
   await prisma.transcript.create({
     data: { candidateId, rawText, summary: parsed.summary, fileUrl: path, fileName: file.name, callDate },
   });
-  await applyAiTags(candidateId, parsed.tags);
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
   revalidatePath(pagePath);
 }

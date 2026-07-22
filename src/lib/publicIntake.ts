@@ -1,9 +1,34 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
-import { parseResume, extractJobFromJD } from "@/lib/ai";
-import { applyAiTags, skillsToTags } from "@/lib/tags";
+import { parseResume, extractJobFromJD, researchCompanyFunding, type FundingResearch } from "@/lib/ai";
+import { applyAiTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding, setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
+
+const FUNDING_CACHE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+// Candidates cluster at the same employers — cache the (context-free) company-level result so
+// a repeat employer costs zero API calls. Context only matters for disambiguating a shared
+// name, and an ambiguous name resolves to "unknown" either way, which is cached too (so it's
+// never re-searched).
+async function getCompanyFundingCached(
+  companyName: string,
+  context: { title?: string | null; location?: string | null }
+): Promise<FundingResearch> {
+  const key = companyName.trim().toLowerCase();
+  const cached = await prisma.fundingCache.findUnique({ where: { companyKey: key } });
+  if (cached && Date.now() - cached.checkedAt.getTime() < FUNDING_CACHE_TTL_MS) {
+    return { stage: cached.stage as FundingResearch["stage"], confidence: cached.confidence as FundingResearch["confidence"], basis: cached.basis };
+  }
+
+  const fresh = await researchCompanyFunding(companyName, context);
+  await prisma.fundingCache.upsert({
+    where: { companyKey: key },
+    update: { stage: fresh.stage, confidence: fresh.confidence, basis: fresh.basis, checkedAt: new Date() },
+    create: { companyKey: key, stage: fresh.stage, confidence: fresh.confidence, basis: fresh.basis },
+  });
+  return fresh;
+}
 
 // Shared core behind both the owner's "Upload resume" action and the public
 // website intake form — resume parsing/tagging/embedding must behave
@@ -29,17 +54,39 @@ export async function ingestResumeFile(
   );
 
   const existing = await prisma.candidate.findUniqueOrThrow({ where: { id: candidateId } });
+  const currentCompany = existing.currentCompany ?? parsed.currentCompany;
   await prisma.candidate.update({
     where: { id: candidateId },
     data: {
       resumeUrl: path,
       currentTitle: existing.currentTitle ?? parsed.currentTitle,
+      currentCompany,
       location: existing.location ?? parsed.location,
       compExpect: existing.compExpect ?? parsed.compExpect,
       summary: existing.summary ?? parsed.summary,
     },
   });
-  await applyAiTags(candidateId, skillsToTags(parsed.skills));
+
+  if (currentCompany) {
+    try {
+      const funding = await Promise.race([
+        getCompanyFundingCached(currentCompany, {
+          title: existing.currentTitle ?? parsed.currentTitle,
+          location: existing.location ?? parsed.location,
+        }),
+        new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error("funding research timeout")), 25_000)
+        ),
+      ]);
+      console.log(`funding research for "${currentCompany}":`, funding);
+      if (funding.stage !== "unknown" && funding.confidence === "high") {
+        await applyAiTags(candidateId, [{ label: funding.stage, kind: "funding" }]);
+      }
+    } catch (e) {
+      console.error("funding research failed (non-fatal)", e);
+    }
+  }
+
   await recomputeCandidateEmbedding(candidateId).catch(console.error);
 }
 

@@ -6,7 +6,7 @@ const SMART = process.env.CLAUDE_MODEL_SMART || "claude-sonnet-5";
 const CHEAP = process.env.CLAUDE_MODEL_CHEAP || "claude-haiku-4-5";
 
 export type TagKind =
-  | "skill" | "seniority" | "status" | "location" | "comp" | "vertical" | "other";
+  | "skill" | "seniority" | "status" | "location" | "comp" | "vertical" | "funding" | "other";
 export interface ExtractedTag { label: string; kind: TagKind; }
 
 /** Strip markdown fences and parse the first JSON object in a model response. */
@@ -27,6 +27,7 @@ function textOf(msg: Anthropic.Message): string {
 
 export interface ResumeParse {
   currentTitle: string | null;
+  currentCompany: string | null;
   location: string | null;
   compExpect: string | null;
   summary: string;
@@ -38,7 +39,7 @@ export async function parseResume(
   input: { text: string } | { pdfBase64: string }
 ): Promise<ResumeParse> {
   const instruction =
-    'You are parsing a resume for a recruiter\'s ATS. Return JSON only: { "currentTitle": string, "location": string|null, "compExpect": string|null, "summary": string (<=25 words), "skills": string[] }.';
+    'You are parsing a resume for a recruiter\'s ATS. Return JSON only: { "currentTitle": string, "currentCompany": string|null (the company they currently work at, exactly as named on the resume; null if unclear), "location": string|null, "compExpect": string|null, "summary": string (<=25 words), "skills": string[] }.';
 
   const content: Anthropic.ContentBlockParam[] =
     "pdfBase64" in input
@@ -57,6 +58,86 @@ export async function parseResume(
     messages: [{ role: "user", content }],
   });
   return parseJson<ResumeParse>(textOf(msg));
+}
+
+export type FundingStage =
+  | "pre-seed" | "seed" | "series-a" | "series-b" | "series-c" | "series-d-plus"
+  | "public" | "bootstrapped" | "pe-owned" | "acquired" | "unknown";
+
+export interface FundingResearch {
+  stage: FundingStage;
+  confidence: "high" | "low";
+  basis: string;
+}
+
+const FUNDING_TOOL: Anthropic.Tool = {
+  name: "submit_funding",
+  description: "Submit the verified funding-stage classification.",
+  input_schema: {
+    type: "object",
+    properties: {
+      stage: {
+        type: "string",
+        enum: [
+          "pre-seed", "seed", "series-a", "series-b", "series-c", "series-d-plus",
+          "public", "bootstrapped", "pe-owned", "acquired", "unknown",
+        ],
+      },
+      confidence: { type: "string", enum: ["high", "low"] },
+      basis: { type: "string", description: "One line citing what the search found." },
+    },
+    required: ["stage", "confidence", "basis"],
+  },
+};
+
+/**
+ * Verify a company's current funding stage via live web search — never guess from memory alone.
+ * Pass the candidate's role/location as context so the RIGHT company is identified when a name
+ * is shared (e.g. a small employer vs a famous namesake); a context conflict forces `unknown`.
+ */
+export async function researchCompanyFunding(
+  companyName: string,
+  context?: { title?: string | null; location?: string | null }
+): Promise<FundingResearch> {
+  const contextLine =
+    context && (context.title || context.location)
+      ? `Disambiguation context — the candidate works there as "${context.title ?? "unknown role"}"${
+          context.location ? ` and is based in/near ${context.location}` : ""
+        }. Use this ONLY to pick the correct company when the name is shared by several; if the company you find clearly does not match this context, or you cannot tell which company is meant, return unknown/low.`
+      : "If multiple companies share this name and you cannot tell which is meant, return unknown/low.";
+
+  const msg = await anthropic.messages.create({
+    model: CHEAP,
+    max_tokens: 600,
+    tools: [
+      {
+        type: "web_search_20260318",
+        name: "web_search",
+        max_uses: 2,
+        allowed_callers: ["direct"],
+      } as unknown as Anthropic.Tool,
+      FUNDING_TOOL,
+    ],
+    messages: [
+      {
+        role: "user",
+        content:
+          `What is the current funding stage of the company "${companyName}"? Use web search to verify — do not answer from memory alone. ` +
+          "Classify into EXACTLY one of: pre-seed, seed, series-a, series-b, series-c, series-d-plus, public, bootstrapped, pe-owned, acquired, unknown. " +
+          "Rules: series-d-plus covers Series D and later private rounds. public = listed on a stock exchange. acquired = bought by another company (use the ACQUIRER's status only if wholly absorbed — otherwise acquired). " +
+          contextLine +
+          " If you genuinely cannot verify, use unknown with low confidence. " +
+          "When finished searching, call submit_funding with your classification.",
+      },
+    ],
+  });
+
+  const toolUse = msg.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_funding"
+  );
+  if (toolUse) return toolUse.input as FundingResearch;
+  // Fallback: model answered in prose instead of calling the tool.
+  return parseJson<FundingResearch>(textOf(msg));
 }
 
 export interface LinkedInParse {

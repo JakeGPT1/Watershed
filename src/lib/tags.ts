@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import type { ExtractedTag } from "./ai";
 
-const KINDS = new Set(["skill", "seniority", "status", "location", "comp", "vertical", "other"]);
+const KINDS = new Set(["skill", "seniority", "status", "location", "comp", "vertical", "funding", "other"]);
 
 /** Upsert AI-extracted tags onto a candidate. Additive only — never removes anything. */
 export async function applyAiTags(candidateId: string, tags: ExtractedTag[]): Promise<void> {
@@ -21,9 +21,4 @@ export async function applyAiTags(candidateId: string, tags: ExtractedTag[]): Pr
       create: { candidateId, tagId: tag.id, source: "ai" },
     });
   }
-}
-
-/** Skills from resume/LinkedIn parses arrive as bare strings — treat as skill tags. */
-export function skillsToTags(skills: string[]): ExtractedTag[] {
-  return (skills ?? []).map((s) => ({ label: s, kind: "skill" as const }));
 }

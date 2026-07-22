@@ -29,6 +29,10 @@ export default async function EditCandidatePage(props: {
           <input name="currentTitle" defaultValue={c.currentTitle ?? ""} className={field} />
         </div>
         <div>
+          <label className="mb-1 block text-sm font-medium text-stone-700">Current company</label>
+          <input name="currentCompany" defaultValue={c.currentCompany ?? ""} className={field} />
+        </div>
+        <div>
           <label className="mb-1 block text-sm font-medium text-stone-700">Location</label>
           <input name="location" defaultValue={c.location ?? ""} className={field} />
         </div>
