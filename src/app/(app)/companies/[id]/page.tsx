@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { updateCompany, addContact, updateContact, removeContact } from "../actions";
+import { updateCompany, deleteCompany, addContact, updateContact, removeContact } from "../actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
+import { DeleteCompanyButton } from "../_components/DeleteCompanyButton";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
@@ -64,6 +65,7 @@ export default async function CompanyPage(props: {
             )}
             {company.notes && <p className="mt-2 text-sm text-stone-700">{company.notes}</p>}
           </div>
+          <DeleteCompanyButton action={deleteCompany.bind(null, id)} name={company.name} />
         </div>
 
         <details className="mt-4 border-t border-stone-100 pt-3">

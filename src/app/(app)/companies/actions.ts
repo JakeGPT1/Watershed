@@ -50,6 +50,33 @@ export async function updateCompany(companyId: string, formData: FormData) {
   revalidatePath("/companies");
 }
 
+export async function deleteCompany(companyId: string) {
+  await requireOwner();
+  const pagePath = `/companies/${companyId}`;
+  const company = await prisma.company.findUnique({
+    where: { id: companyId },
+    include: {
+      _count: { select: { projects: true, jobs: true } },
+    },
+  });
+  if (!company) redirect("/companies");
+
+  if (company._count.projects > 0 || company._count.jobs > 0) {
+    failTo(
+      pagePath,
+      `Can't delete — ${company.name} has ${company._count.projects} project(s) and ${company._count.jobs} job(s) linked. Reassign or delete those first.`
+    );
+  }
+
+  await prisma.$transaction([
+    prisma.contact.deleteMany({ where: { companyId } }),
+    prisma.company.delete({ where: { id: companyId } }),
+  ]);
+
+  revalidatePath("/companies");
+  redirect("/companies");
+}
+
 export async function addContact(companyId: string, formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
