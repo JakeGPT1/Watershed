@@ -4,6 +4,7 @@ import { parseResume, extractJobFromJD, researchCompanyFunding } from "@/lib/ai"
 import { applyAiTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding, setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
+import { findOrCreateCompany } from "@/lib/companies";
 
 const FUNDING_FRESH_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
@@ -18,10 +19,7 @@ async function ensureCompanyFunding(
   companyName: string,
   context: { title?: string | null; location?: string | null }
 ): Promise<string | null> {
-  const existingCo = await prisma.company.findFirst({
-    where: { name: { equals: companyName.trim(), mode: "insensitive" } },
-  });
-  const company = existingCo ?? (await prisma.company.create({ data: { name: companyName.trim() } }));
+  const company = await findOrCreateCompany(companyName);
 
   const isFresh =
     company.fundingCheckedAt && Date.now() - company.fundingCheckedAt.getTime() < FUNDING_FRESH_MS;
@@ -187,10 +185,7 @@ export async function intakeJob(input: {
   roleTitle?: string;
   jdText: string;
 }): Promise<void> {
-  const existingCompany = await prisma.company.findFirst({
-    where: { name: { equals: input.companyName, mode: "insensitive" } },
-  });
-  const company = existingCompany ?? (await prisma.company.create({ data: { name: input.companyName } }));
+  const company = await findOrCreateCompany(input.companyName);
 
   const existingContact = await prisma.contact.findFirst({
     where: { companyId: company.id, name: { equals: input.contactName, mode: "insensitive" } },

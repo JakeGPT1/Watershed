@@ -9,6 +9,7 @@ import { draftBlindOutreach, draftStandardOutreach, extractJobFromJD } from "@/l
 import { setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
 import { failTo } from "@/lib/formError";
+import { findOrCreateCompany } from "@/lib/companies";
 
 export async function runMonitor(): Promise<void> {
   await requireOwner();
@@ -142,8 +143,7 @@ export async function createManualJob(formData: FormData) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   let companyId: string | undefined;
   if (companyName) {
-    const existing = await prisma.company.findFirst({ where: { name: companyName } });
-    const company = existing ?? (await prisma.company.create({ data: { name: companyName } }));
+    const company = await findOrCreateCompany(companyName);
     companyId = company.id;
   }
 

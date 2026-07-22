@@ -8,6 +8,7 @@ import { createAdminClient, JD_BUCKET } from "@/lib/supabase/admin";
 import { STAGES } from "@/lib/stages";
 import { analyzeJobDescription } from "@/lib/ai";
 import { failTo } from "@/lib/formError";
+import { findOrCreateCompany } from "@/lib/companies";
 
 const STATUSES = ["open", "filled", "closed"] as const;
 
@@ -37,8 +38,7 @@ export async function createProject(formData: FormData) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   let companyId: string | undefined;
   if (companyName) {
-    const existing = await prisma.company.findFirst({ where: { name: companyName } });
-    const company = existing ?? (await prisma.company.create({ data: { name: companyName } }));
+    const company = await findOrCreateCompany(companyName);
     companyId = company.id;
   }
 
@@ -61,10 +61,7 @@ export async function renameProject(projectId: string, formData: FormData) {
   const companyName = String(formData.get("companyName") ?? "").trim();
   let companyId: string | null = null;
   if (companyName) {
-    const existing = await prisma.company.findFirst({
-      where: { name: { equals: companyName, mode: "insensitive" } },
-    });
-    const company = existing ?? (await prisma.company.create({ data: { name: companyName } }));
+    const company = await findOrCreateCompany(companyName);
     companyId = company.id;
   }
 
