@@ -8,7 +8,7 @@ export default async function NewCandidatePage(props: { searchParams: Promise<{ 
   const { error } = await props.searchParams;
   return (
     <div className="max-w-lg">
-      <h1 className="mb-6 text-2xl font-semibold text-stone-900">Add candidate</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-stone-900">Manually add candidate</h1>
       <ErrorBanner error={error} clearHref="/candidates/new" />
       <form
         action={createCandidate}

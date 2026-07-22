@@ -44,11 +44,12 @@ export async function createCandidate(formData: FormData) {
   });
 
   const file = formData.get("resume") as File | null;
-  if (file && file.size > 0) {
-    if (file.size > 10 * 1024 * 1024) failTo("/candidates/new", "Resume must be under 10MB");
-    const buffer = Buffer.from(await file.arrayBuffer());
+  const hasResume = !!(file && file.size > 0);
+  if (hasResume) {
+    if (file!.size > 10 * 1024 * 1024) failTo("/candidates/new", "Resume must be under 10MB");
+    const buffer = Buffer.from(await file!.arrayBuffer());
     try {
-      await ingestResumeFile(candidate.id, { buffer, type: file.type, name: file.name });
+      await ingestResumeFile(candidate.id, { buffer, type: file!.type, name: file!.name });
     } catch {
       // Candidate is already created; don't lose it on a parse failure —
       // send the owner to the candidate page where they can retry the upload.
@@ -59,7 +60,37 @@ export async function createCandidate(formData: FormData) {
       );
     }
   }
-  redirect(`/candidates/${candidate.id}`);
+  revalidatePath("/candidates");
+  // With a resume attached, land back on the list so the owner sees the new person added.
+  // A purely manual entry (no file) still goes to the detail page for review.
+  redirect(hasResume ? "/candidates" : `/candidates/${candidate.id}`);
+}
+
+export async function createCandidateFromResume(formData: FormData) {
+  await requireOwner();
+  const uploadPath = "/candidates/upload";
+  const file = formData.get("resume") as File | null;
+  if (!file || file.size === 0) failTo(uploadPath, "Attach a resume");
+  if (file.size > 10 * 1024 * 1024) failTo(uploadPath, "Resume must be under 10MB");
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  // Create with an empty name; ingest fills it from the parsed resume.
+  const candidate = await prisma.candidate.create({ data: { name: "" } });
+  try {
+    await ingestResumeFile(candidate.id, { buffer, type: file.type, name: file.name });
+  } catch {
+    // Parse/storage failed — keep the lead, give it a findable name from the filename.
+    const fallback =
+      file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || "Unnamed candidate";
+    await prisma.candidate.update({ where: { id: candidate.id }, data: { name: fallback } });
+    redirect(
+      `/candidates/${candidate.id}?error=${encodeURIComponent(
+        "Candidate created, but resume parsing failed — review and re-upload."
+      )}`
+    );
+  }
+  revalidatePath("/candidates");
+  redirect("/candidates");
 }
 
 export async function updateCandidate(candidateId: string, formData: FormData) {

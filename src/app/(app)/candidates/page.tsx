@@ -29,12 +29,20 @@ export default async function CandidatesPage(props: {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-stone-900">Candidates</h1>
-        <Link
-          href="/candidates/new"
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
-        >
-          Add Candidate
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/candidates/new"
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+          >
+            Manually Add Candidate
+          </Link>
+          <Link
+            href="/candidates/upload"
+            className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700"
+          >
+            Upload Resume
+          </Link>
+        </div>
       </div>
 
       <form className="mb-4">
@@ -49,7 +57,7 @@ export default async function CandidatesPage(props: {
 
       {candidates.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-300 p-10 text-center text-sm text-stone-500">
-          {query ? "No candidates match that search." : "No candidates yet — add your first."}
+          {query ? "No candidates match that search." : "No candidates yet — upload a resume or add one manually."}
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
@@ -58,6 +66,7 @@ export default async function CandidatesPage(props: {
               <tr>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Title</th>
+                <th className="px-4 py-3">Company</th>
                 <th className="px-4 py-3">Location</th>
                 <th className="px-4 py-3">Tags</th>
               </tr>
@@ -71,6 +80,7 @@ export default async function CandidatesPage(props: {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-stone-600">{c.currentTitle ?? "—"}</td>
+                  <td className="px-4 py-3 text-stone-600">{c.currentCompany ?? "—"}</td>
                   <td className="px-4 py-3 text-stone-600">{c.location ?? "—"}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">

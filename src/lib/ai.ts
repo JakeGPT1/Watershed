@@ -26,6 +26,7 @@ function textOf(msg: Anthropic.Message): string {
 }
 
 export interface ResumeParse {
+  name: string | null;
   currentTitle: string | null;
   currentCompany: string | null;
   location: string | null;
@@ -39,7 +40,7 @@ export async function parseResume(
   input: { text: string } | { pdfBase64: string }
 ): Promise<ResumeParse> {
   const instruction =
-    'You are parsing a resume for a recruiter\'s ATS. Return JSON only: { "currentTitle": string, "currentCompany": string|null (the company they currently work at, exactly as named on the resume; null if unclear), "location": string|null, "compExpect": string|null, "summary": string (<=25 words), "skills": string[] }.';
+    'You are parsing a resume for a recruiter\'s ATS. Return JSON only: { "name": string|null (the person\'s full name from the top of the resume; null if unclear), "currentTitle": string, "currentCompany": string|null (the company they currently work at, exactly as named on the resume; null if unclear), "location": string|null, "compExpect": string|null, "summary": string (<=25 words), "skills": string[] }.';
 
   const content: Anthropic.ContentBlockParam[] =
     "pdfBase64" in input

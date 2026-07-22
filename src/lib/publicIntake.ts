@@ -35,6 +35,7 @@ export async function ingestResumeFile(
     where: { id: candidateId },
     data: {
       resumeUrl: path,
+      name: existing.name || parsed.name || "Unnamed candidate",
       currentTitle: existing.currentTitle ?? parsed.currentTitle,
       currentCompany,
       location: existing.location ?? parsed.location,
