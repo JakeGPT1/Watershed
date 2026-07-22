@@ -47,10 +47,14 @@ export default async function CompanyPage(props: {
               )}
             </div>
             <p className="mt-1 text-sm text-stone-600">{company.industry ?? "No industry set"}</p>
-            {company.fundingStage && (
+            {company.fundingStage ? (
               <p className="mt-1 text-xs text-stone-400">
                 {company.fundingBasis}
                 {company.fundingCheckedAt && ` · checked ${company.fundingCheckedAt.toLocaleDateString()}`}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-stone-400">
+                Set a funding stage below to tag all candidates here.
               </p>
             )}
             {company.website && (

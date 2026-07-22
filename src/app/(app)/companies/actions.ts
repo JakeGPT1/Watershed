@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireOwner } from "@/lib/supabase/server";
 import { failTo } from "@/lib/formError";
+import { syncCandidateFundingTags } from "@/lib/companies";
 
 export async function createCompany(formData: FormData) {
   await requireOwner();
@@ -46,6 +47,11 @@ export async function updateCompany(companyId: string, formData: FormData) {
         : {}),
     },
   });
+
+  if (fundingChanged) {
+    await syncCandidateFundingTags(name, fundingStage);
+  }
+
   revalidatePath(`/companies/${companyId}`);
   revalidatePath("/companies");
 }

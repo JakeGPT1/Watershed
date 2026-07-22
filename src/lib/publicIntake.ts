@@ -1,38 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { createAdminClient, RESUMES_BUCKET } from "@/lib/supabase/admin";
-import { parseResume, extractJobFromJD, researchCompanyFunding } from "@/lib/ai";
+import { parseResume, extractJobFromJD } from "@/lib/ai";
 import { applyAiTags } from "@/lib/tags";
 import { recomputeCandidateEmbedding, setJobEmbedding } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
 import { findOrCreateCompany } from "@/lib/companies";
-
-const FUNDING_FRESH_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
-
-/**
- * Find-or-create the Company for a candidate's current employer, and ensure it has a funding
- * stage on file — reusing a fresh (<90d) stored value with ZERO API calls, or researching once
- * and storing the result on the Company row (the single source of truth; no separate cache
- * table). A low-confidence research result is stored as "unknown" so every consumer of
- * `fundingStage` can use one simple rule: `stage !== "unknown"` means tag-worthy.
- */
-async function ensureCompanyFunding(
-  companyName: string,
-  context: { title?: string | null; location?: string | null }
-): Promise<string | null> {
-  const company = await findOrCreateCompany(companyName);
-
-  const isFresh =
-    company.fundingCheckedAt && Date.now() - company.fundingCheckedAt.getTime() < FUNDING_FRESH_MS;
-  if (isFresh) return company.fundingStage;
-
-  const fresh = await researchCompanyFunding(companyName, context);
-  const stage = fresh.confidence === "high" ? fresh.stage : "unknown";
-  await prisma.company.update({
-    where: { id: company.id },
-    data: { fundingStage: stage, fundingBasis: fresh.basis, fundingCheckedAt: new Date() },
-  });
-  return stage;
-}
 
 // Shared core behind both the owner's "Upload resume" action and the public
 // website intake form — resume parsing/tagging/embedding must behave
@@ -73,21 +45,14 @@ export async function ingestResumeFile(
 
   if (currentCompany) {
     try {
-      const stage = await Promise.race([
-        ensureCompanyFunding(currentCompany, {
-          title: existing.currentTitle ?? parsed.currentTitle,
-          location: existing.location ?? parsed.location,
-        }),
-        new Promise<never>((_, rej) =>
-          setTimeout(() => rej(new Error("funding research timeout")), 25_000)
-        ),
-      ]);
-      console.log(`funding stage for "${currentCompany}":`, stage);
-      if (stage && stage !== "unknown") {
-        await applyAiTags(candidateId, [{ label: stage, kind: "funding" }]);
+      // Ensure the company exists (so it shows up for the owner to classify) and tag the
+      // candidate from its stored stage — no API call. Unclassified company => no tag yet.
+      const company = await findOrCreateCompany(currentCompany);
+      if (company.fundingStage && company.fundingStage !== "unknown") {
+        await applyAiTags(candidateId, [{ label: company.fundingStage, kind: "funding" }]);
       }
     } catch (e) {
-      console.error("company funding flow failed (non-fatal)", e);
+      console.error("company funding tag (non-fatal)", e);
     }
   }
 

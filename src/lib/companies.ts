@@ -1,8 +1,17 @@
 import { prisma } from "@/lib/prisma";
+import { applyAiTags } from "@/lib/tags";
+import { recomputeCandidateEmbedding } from "@/lib/embedding";
 import type { Company } from "@prisma/client";
 
 /** Strip a common legal suffix and collapse whitespace for comparison purposes only —
- *  the stored name keeps whatever the user/AI typed, just trimmed. */
+ *  the stored name keeps whatever the user/AI typed, just trimmed. Exported as `companyKey`
+ *  so callers outside this file (the funding-tag sync) can match candidates the exact same
+ *  way the dedupe does — a candidate whose resume said "Broweserbase" still syncs against
+ *  the company row named "Browserbase". */
+export function companyKey(name: string): string {
+  return normalize(name);
+}
+
 function normalize(name: string): string {
   return name
     .trim()
@@ -87,4 +96,29 @@ export async function findOrCreateCompany(rawName: string): Promise<Company> {
   }
 
   return prisma.company.create({ data: { name } });
+}
+
+/**
+ * Re-tag every candidate at `companyName` to match `stage`. Called when the owner sets/changes/
+ * clears a company's funding stage. Matches candidates by NORMALIZED currentCompany (free-text
+ * field, no FK), so typo variants still sync. Zero external API calls beyond the routine
+ * embedding recompute (OpenAI embeddings — cheap — already run on every resume upload).
+ */
+export async function syncCandidateFundingTags(companyName: string, stage: string | null): Promise<number> {
+  const key = companyKey(companyName);
+  const candidates = await prisma.candidate.findMany({
+    where: { currentCompany: { not: null } },
+    select: { id: true, currentCompany: true },
+  });
+  const matched = candidates.filter((c) => companyKey(c.currentCompany!) === key);
+
+  for (const c of matched) {
+    // Clear any existing funding-kind tag(s) first, then apply the new one if set.
+    await prisma.candidateTag.deleteMany({ where: { candidateId: c.id, tag: { kind: "funding" } } });
+    if (stage && stage !== "unknown") {
+      await applyAiTags(c.id, [{ label: stage, kind: "funding" }]);
+    }
+    await recomputeCandidateEmbedding(c.id).catch(console.error);
+  }
+  return matched.length;
 }
