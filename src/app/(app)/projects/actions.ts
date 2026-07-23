@@ -82,6 +82,30 @@ export async function updateProjectStatus(projectId: string, formData: FormData)
   revalidatePath("/projects");
 }
 
+export async function deleteProject(projectId: string) {
+  await requireOwner();
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) redirect("/projects");
+
+  await prisma.$transaction([
+    prisma.projectCandidate.deleteMany({ where: { projectId } }),
+    prisma.project.delete({ where: { id: projectId } }),
+  ]);
+
+  // Best-effort JD file cleanup — never block the delete on a storage hiccup.
+  try {
+    if (project.jdFileUrl) {
+      const admin = createAdminClient();
+      await admin.storage.from(JD_BUCKET).remove([project.jdFileUrl]);
+    }
+  } catch (e) {
+    console.error("deleteProject: JD storage cleanup failed (rows already deleted)", e);
+  }
+
+  revalidatePath("/projects");
+  redirect("/projects");
+}
+
 export async function addCandidatesToProject(projectId: string, formData: FormData) {
   await requireOwner();
   const candidateIds = formData.getAll("candidateIds").map(String).filter(Boolean);
