@@ -33,15 +33,24 @@ export async function createCandidate(formData: FormData) {
     failTo("/candidates/new", e instanceof Error ? e.message : "Invalid LinkedIn URL");
   }
 
+  const currentCompany = String(formData.get("currentCompany") ?? "").trim() || null;
+
   const candidate = await prisma.candidate.create({
     data: {
       name,
       currentTitle: String(formData.get("currentTitle") ?? "").trim() || null,
+      currentCompany,
       location: String(formData.get("location") ?? "").trim() || null,
       compExpect: String(formData.get("compExpect") ?? "").trim() || null,
       linkedinUrl,
     },
   });
+
+  if (currentCompany) {
+    await findOrCreateCompany(currentCompany).catch((e) =>
+      console.error("createCandidate: findOrCreateCompany failed (non-fatal)", e)
+    );
+  }
 
   const file = formData.get("resume") as File | null;
   const hasResume = !!(file && file.size > 0);

@@ -24,6 +24,10 @@ export default async function NewCandidatePage(props: { searchParams: Promise<{ 
           <input name="currentTitle" className={field} />
         </div>
         <div>
+          <label className="mb-1 block text-sm font-medium text-stone-700">Current company</label>
+          <input name="currentCompany" className={field} />
+        </div>
+        <div>
           <label className="mb-1 block text-sm font-medium text-stone-700">Location</label>
           <input name="location" className={field} />
         </div>

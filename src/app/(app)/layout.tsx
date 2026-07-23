@@ -8,6 +8,14 @@ import { signOut } from "./actions";
 // duration. The cron route sets its own maxDuration separately.
 export const maxDuration = 60;
 
+// This is a live, single-owner ATS — every page under here must always reflect current DB
+// state, never a build-time snapshot. A list page with no dynamic input (no search params,
+// no cookies read in the page itself) gets statically prerendered by default and then serves
+// a frozen snapshot from the last deploy forever after — confirmed live: a company created via
+// resume ingest after deploy was invisible on /companies until this was added. Forcing the
+// whole authenticated app dynamic closes this for every current AND future list page.
+export const dynamic = "force-dynamic";
+
 const NAV = [
   { href: "/candidates", label: "Candidates" },
   { href: "/projects", label: "Projects" },
