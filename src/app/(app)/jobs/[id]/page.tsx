@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { refreshJobMatches, draftOutreach } from "../actions";
+import { refreshJobMatches, draftOutreach, generateRationale } from "../actions";
 import { CopyButton } from "../_components/CopyButton";
 import { ErrorBanner } from "../../_components/ErrorBanner";
 
@@ -106,7 +106,22 @@ export default async function JobPage(props: {
                     {m.candidate.name}
                   </Link>
                   <span className="text-stone-500"> — {m.candidate.currentTitle ?? "—"}</span>
-                  {m.rationale && <p className="text-xs text-stone-500">{m.rationale}</p>}
+                  {m.rationale ? (
+                    <div className="mt-0.5 flex items-start gap-2">
+                      <p className="text-xs text-stone-500">{m.rationale}</p>
+                      <form action={generateRationale.bind(null, job.id, m.candidateId)}>
+                        <button className="shrink-0 text-xs text-blue-700 hover:underline" title="Regenerate (uses one AI call)">
+                          ↻
+                        </button>
+                      </form>
+                    </div>
+                  ) : (
+                    <form action={generateRationale.bind(null, job.id, m.candidateId)} className="mt-0.5">
+                      <button className="rounded-md border border-stone-300 px-2 py-0.5 text-xs text-stone-600 hover:bg-stone-50">
+                        Generate rationale
+                      </button>
+                    </form>
+                  )}
                 </div>
                 <span className="shrink-0 rounded-md bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
                   {Math.round(m.score * 100)}%

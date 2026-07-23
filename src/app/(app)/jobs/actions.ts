@@ -7,7 +7,7 @@ import { requireOwner } from "@/lib/supabase/server";
 import { runGtmMonitor } from "@/lib/gtm/monitor";
 import { draftBlindOutreach, draftStandardOutreach, extractJobFromJD } from "@/lib/ai";
 import { setJobEmbedding } from "@/lib/embedding";
-import { matchCandidatesToJob } from "@/lib/matching";
+import { matchCandidatesToJob, generateMatchRationale } from "@/lib/matching";
 import { failTo } from "@/lib/formError";
 import { findOrCreateCompany } from "@/lib/companies";
 
@@ -178,6 +178,12 @@ export async function refreshJobMatches(jobId: string) {
   await matchCandidatesToJob(jobId);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
+}
+
+export async function generateRationale(jobId: string, candidateId: string) {
+  await requireOwner();
+  await generateMatchRationale(jobId, candidateId);
+  revalidatePath(`/jobs/${jobId}`);
 }
 
 /** Draft a standard (named) outreach email for a job, optionally addressed to a contact. */
