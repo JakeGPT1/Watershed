@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   addNote,
+  editNote,
   addTranscript,
   uploadResume,
   addManualTag,
@@ -225,7 +226,25 @@ export default async function CandidatePage(props: {
               </span>
               <span className="text-xs text-stone-400">{item.date.toLocaleDateString()}</span>
             </div>
-            {item.kind === "note" && <p className="whitespace-pre-wrap text-sm text-stone-700">{item.note.body}</p>}
+            {item.kind === "note" && (
+              <div>
+                <p className="whitespace-pre-wrap text-sm text-stone-700">{item.note.body}</p>
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-xs text-blue-700">Edit</summary>
+                  <form action={editNote.bind(null, item.note.id, id)} className="mt-2">
+                    <textarea
+                      name="body"
+                      defaultValue={item.note.body}
+                      rows={3}
+                      className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+                    />
+                    <button className="mt-2 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">
+                      Save Note
+                    </button>
+                  </form>
+                </details>
+              </div>
+            )}
             {item.kind === "transcript" && (
               <div>
                 <p className="text-sm text-stone-700">{item.transcript.summary ?? "(no summary)"}</p>

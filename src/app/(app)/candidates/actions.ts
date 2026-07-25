@@ -170,6 +170,17 @@ export async function addNote(candidateId: string, formData: FormData) {
   revalidatePath(pagePath);
 }
 
+export async function editNote(noteId: string, candidateId: string, formData: FormData) {
+  await requireOwner();
+  const pagePath = `/candidates/${candidateId}`;
+  const body = String(formData.get("body") ?? "").trim();
+  if (!body) failTo(pagePath, "Note is empty");
+
+  await prisma.note.update({ where: { id: noteId }, data: { body } });
+  await recomputeCandidateEmbedding(candidateId).catch(console.error);
+  revalidatePath(pagePath);
+}
+
 export async function addTranscript(candidateId: string, formData: FormData) {
   await requireOwner();
   const pagePath = `/candidates/${candidateId}`;
