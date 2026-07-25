@@ -14,6 +14,7 @@ import {
 } from "../actions";
 import { addCandidateToProjectFromCandidate } from "../../projects/actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
+import { SubmitButton } from "../../_components/SubmitButton";
 import { DeleteCandidateButton } from "../_components/DeleteCandidateButton";
 
 const field =
@@ -188,7 +189,7 @@ export default async function CandidatePage(props: {
           <summary className="cursor-pointer text-sm font-medium text-stone-800">Upload resume</summary>
           <form action={uploadResume.bind(null, id)} className="mt-3 space-y-2">
             <input type="file" name="resume" accept=".pdf,.txt,.md,application/pdf,text/plain" required className="block w-full text-xs" />
-            <button className={btn}>Upload &amp; Parse</button>
+            <SubmitButton className={btn}>Upload &amp; Parse</SubmitButton>
             <p className="text-xs text-stone-500">PDF or plain text. AI extracts title, location, skills.</p>
           </form>
         </details>
@@ -198,7 +199,7 @@ export default async function CandidatePage(props: {
           <form action={addTranscript.bind(null, id)} className="mt-3 space-y-2">
             <input type="file" name="transcript" accept=".pdf,.txt,.md,.vtt,application/pdf,text/plain" required className="block w-full text-xs" />
             <input type="date" name="callDate" className={field} />
-            <button className={btn}>Upload &amp; Summarize</button>
+            <SubmitButton className={btn}>Upload &amp; Summarize</SubmitButton>
             <p className="text-xs text-stone-500">PDF or text. AI summarizes and tags automatically.</p>
           </form>
         </details>
@@ -207,7 +208,7 @@ export default async function CandidatePage(props: {
       {/* Add note */}
       <form action={addNote.bind(null, id)} className="mb-6 rounded-xl border border-stone-200 bg-white p-4">
         <textarea name="body" rows={2} required placeholder="Add a note — AI tags it automatically…" className={field} />
-        <button className={`mt-2 ${btn}`}>Add Note</button>
+        <SubmitButton className={`mt-2 ${btn}`}>Add Note</SubmitButton>
       </form>
 
       {/* Timeline */}
@@ -238,9 +239,9 @@ export default async function CandidatePage(props: {
                       rows={3}
                       className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
                     />
-                    <button className="mt-2 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">
+                    <SubmitButton className="mt-2 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-700">
                       Save Note
-                    </button>
+                    </SubmitButton>
                   </form>
                 </details>
               </div>

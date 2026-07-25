@@ -1,5 +1,6 @@
 import { createCandidate } from "../actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
+import { SubmitButton } from "../../_components/SubmitButton";
 
 const field =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500";
@@ -51,9 +52,9 @@ export default async function NewCandidatePage(props: { searchParams: Promise<{ 
             Attach a PDF and AI fills in title, location, and skills automatically.
           </p>
         </div>
-        <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
+        <SubmitButton className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
           Create Candidate
-        </button>
+        </SubmitButton>
       </form>
       <p className="mt-3 text-xs text-stone-500">
         Attach a resume above, or add one later from the candidate page — AI fills in the rest either way.

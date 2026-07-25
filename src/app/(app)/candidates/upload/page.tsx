@@ -1,5 +1,6 @@
 import { createCandidateFromResume } from "../actions";
 import { ErrorBanner } from "../../_components/ErrorBanner";
+import { SubmitButton } from "../../_components/SubmitButton";
 
 export default async function UploadResumePage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
@@ -25,9 +26,9 @@ export default async function UploadResumePage(props: { searchParams: Promise<{ 
             AI reads the resume and creates the full candidate record — name, title, company, location, skills.
           </p>
         </div>
-        <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
+        <SubmitButton className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
           Create From Resume
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );
