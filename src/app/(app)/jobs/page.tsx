@@ -28,7 +28,11 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
 
   const myJobs = await prisma.job.findMany({
     where: { externalId: null },
-    include: { company: true, _count: { select: { matches: true } } },
+    include: {
+      company: true,
+      project: { select: { id: true } },
+      _count: { select: { matches: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -179,6 +183,7 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                 <th className="px-4 py-3">Title</th>
                 <th className="px-4 py-3">Company</th>
                 <th className="px-4 py-3">Matches</th>
+                <th className="px-4 py-3">Project</th>
               </tr>
             </thead>
             <tbody>
@@ -196,6 +201,19 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                   </td>
                   <td className="px-4 py-3 text-stone-600">{job.company?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-stone-600">{job._count.matches}</td>
+                  <td className="px-4 py-3">
+                    {job.project ? (
+                      <Link href={`/projects/${job.project.id}`} className="text-xs text-blue-700 hover:underline">
+                        View Project ↗
+                      </Link>
+                    ) : (
+                      <form action={winOpportunity.bind(null, job.id)}>
+                        <button className="rounded-lg border border-stone-300 px-3 py-1 text-xs text-stone-600 hover:bg-stone-50">
+                          Move to Project
+                        </button>
+                      </form>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
