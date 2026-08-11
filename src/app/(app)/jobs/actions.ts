@@ -15,6 +15,7 @@ export async function runMonitor(): Promise<void> {
   await requireOwner();
   await runGtmMonitor();
   revalidatePath("/jobs");
+  redirect("/jobs");
 }
 
 /** Win an opportunity: create a Project linked to this Job, seeded with its matched candidates. */

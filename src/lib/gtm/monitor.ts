@@ -179,9 +179,14 @@ export async function runGtmMonitor(): Promise<MonitorRunResult> {
     }
   }
 
-  // Auto-match candidates against each current opportunity.
-  for (const jobId of opportunityJobIds) {
-    await matchCandidatesToJob(jobId);
+  // Auto-match candidates against every current opportunity (not just those surfaced this
+  // run), so the displayed top-3 always have fresh matches. Ranking is pgvector-only/cost-free.
+  const liveOpps = await prisma.job.findMany({
+    where: { isGtmOpportunity: true },
+    select: { id: true },
+  });
+  for (const { id } of liveOpps) {
+    await matchCandidatesToJob(id);
   }
 
   return {

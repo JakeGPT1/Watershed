@@ -1,23 +1,29 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail, refreshJobMatches } from "./actions";
+import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail } from "./actions";
+import { icpScore } from "@/lib/gtm/icp";
 import { CopyButton } from "./_components/CopyButton";
 import { ErrorBanner } from "../_components/ErrorBanner";
 
 export default async function JobsPage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
-  const opportunities = await prisma.job.findMany({
+  const allOpportunities = await prisma.job.findMany({
     where: { isGtmOpportunity: true },
     include: {
       company: true,
       matches: {
         include: { candidate: true },
         orderBy: { score: "desc" },
+        take: 3,
       },
       outreach: { orderBy: { createdAt: "desc" }, take: 1 },
     },
-    orderBy: [{ isLeadershipRole: "desc" }, { discoveredAt: "desc" }],
   });
+
+  // Top 3 best-fit BD opportunities for Watershed's ideal clientele (growth-stage GTM hirers).
+  const opportunities = [...allOpportunities]
+    .sort((a, b) => icpScore(b) - icpScore(a))
+    .slice(0, 3);
 
   const unresolvedCount = await prisma.company.count({
     where: { isGtmTarget: true, atsType: "unknown" },
@@ -56,8 +62,9 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
         </div>
       </div>
       <p className="mb-6 text-sm text-stone-500">
-        Top GTM hiring signal across your target companies — new/leadership sales &amp; marketing
-        postings, auto-matched against your candidate database.
+        Your top 3 BD opportunities right now, ranked by fit to Watershed&apos;s ideal clientele —
+        growth-stage companies hiring GTM leaders. Refreshed weekly (Monday morning) and whenever
+        you hit Run Monitor Now.
         {pendingCount > 0 && ` ${pendingCount} companies not yet checked.`}
         {unresolvedCount > 0 && ` ${unresolvedCount} companies have no known job board (skipped).`}
       </p>
@@ -102,11 +109,6 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                       Win → Create Project
                     </button>
                   </form>
-                  <form action={refreshJobMatches.bind(null, job.id)}>
-                    <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
-                      Refresh Matches
-                    </button>
-                  </form>
                   {job.matches.length > 0 && (
                     <form action={draftBlindEmail.bind(null, job.id)}>
                       <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
@@ -127,20 +129,15 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                   <p className="mb-2 text-xs font-medium uppercase tracking-wide text-stone-500">
                     Matched candidates
                   </p>
-                  <div className="space-y-2">
+                  <div className="space-y-1">
                     {job.matches.map((m) => (
-                      <div key={m.candidateId} className="flex items-start justify-between gap-3 text-sm">
-                        <div>
-                          <Link href={`/candidates/${m.candidateId}`} className="font-medium text-stone-900 hover:underline">
-                            {m.candidate.name}
-                          </Link>
-                          <span className="text-stone-500"> — {m.candidate.currentTitle ?? "—"}</span>
-                          {m.rationale && <p className="text-xs text-stone-500">{m.rationale}</p>}
-                        </div>
-                        <span className="shrink-0 rounded-md bg-stone-100 px-2 py-0.5 text-xs text-stone-600">
-                          {Math.round(m.score * 100)}%
-                        </span>
-                      </div>
+                      <Link
+                        key={m.candidateId}
+                        href={`/candidates/${m.candidateId}`}
+                        className="block text-sm font-medium text-stone-900 hover:underline"
+                      >
+                        {m.candidate.name}
+                      </Link>
                     ))}
                   </div>
                 </div>
