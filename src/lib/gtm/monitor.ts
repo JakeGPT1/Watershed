@@ -16,7 +16,7 @@ export interface MonitorRunResult {
 // Bounded-concurrency map — parallelizes the monitor's external I/O (ATS discovery + posting
 // fetches) so a large seed list finishes well under the serverless function timeout instead of
 // running dozens of sequential HTTP round-trips (which pushed the run past 60s and crashed it).
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let cursor = 0;
   async function worker() {

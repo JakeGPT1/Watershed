@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runGtmMonitor } from "@/lib/gtm/monitor";
+import { runWeeklyAudit } from "@/lib/gtm/audit";
 
 // Vercel Cron invokes this on schedule (see vercel.json), sending
 // Authorization: Bearer $CRON_SECRET automatically. Reject anything else —
@@ -14,6 +15,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await runGtmMonitor();
+    // Weekly self-improvement pass — runs only on this Monday cron, never on manual
+    // "Run Monitor Now". Non-fatal: a failed audit must not fail the monitor run.
+    await runWeeklyAudit().catch((e) => console.error("weekly audit failed (non-fatal)", e));
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

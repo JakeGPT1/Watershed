@@ -5,7 +5,7 @@
 type IcpJob = {
   isLeadershipRole: boolean;
   discoveredAt: Date | null;
-  company: { fundingStage: string | null } | null;
+  company: { fundingStage: string | null; icpBoost?: number } | null;
 };
 
 const STAGE_WEIGHT: Record<string, number> = {
@@ -30,5 +30,8 @@ export function icpScore(job: IcpJob, now: number = Date.now()): number {
     const days = (now - job.discoveredAt.getTime()) / 86_400_000;
     score += Math.max(0, 14 - days); // fresher postings edge ahead
   }
+  // Learned weekly from the owner's wins/dismissals (clamped ±15-20 by the audit, so it
+  // nudges ordering without ever dominating or hiding anything).
+  score += job.company?.icpBoost ?? 0;
   return score;
 }

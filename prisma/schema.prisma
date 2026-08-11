@@ -20,6 +20,7 @@ model Company {
   fundingStage     String?   // controlled vocab: pre-seed … series-d-plus, public, bootstrapped, pe-owned, acquired, unknown
   fundingBasis     String?   // one-line citation from the research
   fundingCheckedAt DateTime?
+  icpBoost         Float     @default(0) // learned weekly from wins/dismissals; clamped, reorders only
   contacts         Contact[]
   jobs             Job[]
   projects         Project[]
@@ -107,6 +108,21 @@ model Transcript {
   fileName    String?
   callDate    DateTime  @default(now())
   createdAt   DateTime  @default(now())
+}
+
+model GtmAudit {
+  id                 String   @id @default(cuid())
+  runAt              DateTime @default(now())
+  companiesTotal     Int
+  companiesResolved  Int
+  companiesUnknown   Int
+  recoveredThisRun   Int // unknown companies that became resolvable this week
+  promotedFromDb     Int      @default(0) // pipeline companies promoted into the monitor (free)
+  suggestedAdded     Int      @default(0) // AI-suggested companies that passed the ATS probe
+  opportunities      Int
+  winsLastWeek       Int
+  dismissalsLastWeek Int
+  notes              String?
 }
 
 model Tag {

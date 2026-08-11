@@ -141,6 +141,64 @@ export async function researchCompanyFunding(
   return parseJson<FundingResearch>(textOf(msg));
 }
 
+const COMPANIES_TOOL: Anthropic.Tool = {
+  name: "submit_companies",
+  description: "Submit the list of suggested company names.",
+  input_schema: {
+    type: "object",
+    properties: {
+      names: {
+        type: "array",
+        items: { type: "string" },
+        description: "Company names only, no descriptions.",
+      },
+    },
+    required: ["names"],
+  },
+};
+
+/**
+ * Suggest US growth-stage companies actively hiring GTM leadership, for the weekly monitor
+ * expansion. Called AT MOST once per week. Suggestions are only candidates — the free
+ * job-board probe (discoverAts) is the real gate, so a wrong or hallucinated name simply
+ * fails to resolve and never enters the monitor.
+ */
+export async function suggestGtmCompanies(exclude: string[]): Promise<string[]> {
+  const excludeList = exclude.slice(0, 120).join(", ");
+  const msg = await anthropic.messages.create({
+    model: CHEAP,
+    max_tokens: 600,
+    tools: [
+      {
+        type: "web_search_20260318",
+        name: "web_search",
+        max_uses: 2,
+        allowed_callers: ["direct"],
+      } as unknown as Anthropic.Tool,
+      COMPANIES_TOOL,
+    ],
+    messages: [
+      {
+        role: "user",
+        content:
+          "Name up to 10 US-based, growth-stage technology companies (roughly seed through Series C) " +
+          "that are actively hiring sales or marketing leadership right now. Prefer companies that " +
+          "post roles on Greenhouse, Lever, or Ashby. Use web search to ground your answer in current hiring activity. " +
+          `Exclude these companies (already tracked): ${excludeList || "(none)"}. ` +
+          "Return company names ONLY — no descriptions, no URLs. Call submit_companies with the list.",
+      },
+    ],
+  });
+
+  const toolUse = msg.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_companies"
+  );
+  if (!toolUse) return [];
+  const input = toolUse.input as { names?: unknown };
+  if (!Array.isArray(input.names)) return [];
+  return input.names.filter((n): n is string => typeof n === "string" && n.trim().length > 0);
+}
+
 export interface LinkedInParse {
   currentTitle: string | null;
   location: string | null;

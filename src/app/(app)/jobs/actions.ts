@@ -122,6 +122,9 @@ export async function draftBlindEmail(jobId: string) {
   });
 
   revalidatePath("/jobs");
+  // Show the draft exactly once: the ?drafted param scopes the render to this job, and the
+  // page strips it from the URL client-side so a refresh comes back clean (no clutter).
+  redirect(`/jobs?drafted=${jobId}`);
 }
 
 export async function dismissOpportunity(jobId: string) {

@@ -3,11 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail } from "./actions";
 import { icpScore } from "@/lib/gtm/icp";
 import { CopyButton } from "./_components/CopyButton";
+import { StripDraftParam } from "./_components/StripDraftParam";
 import { ErrorBanner } from "../_components/ErrorBanner";
 import { SubmitButton } from "../_components/SubmitButton";
 
-export default async function JobsPage(props: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await props.searchParams;
+export default async function JobsPage(props: {
+  searchParams: Promise<{ error?: string; drafted?: string }>;
+}) {
+  const { error, drafted } = await props.searchParams;
   // Only surface opportunities posted within the last month (keeps the BD list fresh). A
   // posting with no date from its ATS is treated as live-now (the monitor only re-surfaces
   // currently-open roles), so it isn't hidden.
@@ -40,6 +43,8 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
     where: { isGtmTarget: true, atsType: null },
   });
 
+  const lastAudit = await prisma.gtmAudit.findFirst({ orderBy: { runAt: "desc" } });
+
   const myJobs = await prisma.job.findMany({
     where: { externalId: null },
     include: {
@@ -53,6 +58,7 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
   return (
     <div className="max-w-3xl">
       <ErrorBanner error={error} clearHref="/jobs" />
+      {drafted && <StripDraftParam />}
       <div className="mb-2 flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-stone-900">GTM Opportunities</h1>
         <div className="flex gap-2">
@@ -79,6 +85,16 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
         {pendingCount > 0 && ` ${pendingCount} companies not yet checked.`}
         {unresolvedCount > 0 && ` ${unresolvedCount} companies have no known job board (skipped).`}
       </p>
+
+      {lastAudit && (
+        <p className="-mt-4 mb-6 text-xs text-stone-400">
+          Last self-audit {lastAudit.runAt.toLocaleDateString()} —{" "}
+          {lastAudit.companiesResolved}/{lastAudit.companiesTotal} companies covered,{" "}
+          {lastAudit.promotedFromDb + lastAudit.suggestedAdded} newly added,{" "}
+          {lastAudit.recoveredThisRun} newly reachable, {lastAudit.winsLastWeek} wins. The monitor
+          gets a little wider and sharper each Monday.
+        </p>
+      )}
 
       {opportunities.length === 0 ? (
         <p className="rounded-xl border border-dashed border-stone-300 p-10 text-center text-sm text-stone-500">
@@ -152,7 +168,7 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                 </div>
               )}
 
-              {job.outreach[0] && (
+              {drafted === job.id && job.outreach[0] && (
                 <div className="mt-4 border-t border-stone-100 pt-3">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-xs font-medium uppercase tracking-wide text-stone-500">
