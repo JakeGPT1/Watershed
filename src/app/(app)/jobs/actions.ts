@@ -23,7 +23,7 @@ export async function winOpportunity(jobId: string) {
 
   const job = await prisma.job.findUniqueOrThrow({
     where: { id: jobId },
-    include: { company: true, matches: true },
+    include: { company: true },
   });
 
   // Idempotent win: Project.jobId is unique, so re-clicking Win on an already-won
@@ -33,6 +33,8 @@ export async function winOpportunity(jobId: string) {
     redirect(`/projects/${existingProject.id}`);
   }
 
+  // The project is created EMPTY — the owner adds candidates manually. (We deliberately do
+  // not seed the job's matched candidates.)
   const project = await prisma.project.create({
     data: {
       title: job.company ? `${job.company.name} — ${job.title}` : job.title,
@@ -40,16 +42,6 @@ export async function winOpportunity(jobId: string) {
       jobId: job.id,
     },
   });
-
-  if (job.matches.length > 0) {
-    await prisma.projectCandidate.createMany({
-      data: job.matches.map((m) => ({
-        projectId: project.id,
-        candidateId: m.candidateId,
-      })),
-      skipDuplicates: true,
-    });
-  }
 
   revalidatePath("/jobs");
   revalidatePath("/projects");
