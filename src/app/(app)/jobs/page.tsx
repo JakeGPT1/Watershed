@@ -4,6 +4,7 @@ import { runMonitor, winOpportunity, dismissOpportunity, draftBlindEmail } from 
 import { icpScore } from "@/lib/gtm/icp";
 import { CopyButton } from "./_components/CopyButton";
 import { ErrorBanner } from "../_components/ErrorBanner";
+import { SubmitButton } from "../_components/SubmitButton";
 
 export default async function JobsPage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
@@ -55,9 +56,12 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
             Paste a Job
           </Link>
           <form action={runMonitor}>
-            <button className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700">
+            <SubmitButton
+              className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-700 disabled:cursor-not-allowed disabled:opacity-60"
+              pendingLabel="Running monitor…"
+            >
               Run Monitor Now
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>
