@@ -13,11 +13,27 @@ export interface MonitorRunResult {
   opportunityJobIds: string[]; // the curated top-N, one per company
 }
 
+// Bounded-concurrency map — parallelizes the monitor's external I/O (ATS discovery + posting
+// fetches) so a large seed list finishes well under the serverless function timeout instead of
+// running dozens of sequential HTTP round-trips (which pushed the run past 60s and crashed it).
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      results[idx] = await fn(items[idx]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) || 1 }, worker));
+  return results;
+}
+
 /** Ensure every seed company exists as a GTM-target Company row, resolving unknown ATS slugs. */
 async function ensureCompaniesResolved(): Promise<string[]> {
-  const newlyResolved: string[] = [];
-
-  for (const seed of GTM_SEED_COMPANIES) {
+  // Parallelize discovery — probing ATS slugs for a large seed list one-at-a-time is the
+  // biggest first-run cost. Each seed is independent (distinct name), so this is race-free.
+  const resolved = await mapLimit(GTM_SEED_COMPANIES, 6, async (seed) => {
     let company = await prisma.company.findFirst({ where: { name: seed.name } });
 
     if (!company) {
@@ -38,21 +54,21 @@ async function ensureCompaniesResolved(): Promise<string[]> {
 
     // Resolve ATS only if not yet known — cache the result so we never re-probe a resolved company.
     if (!company.atsType) {
-      const discovered = await discoverAts(seed.name);
+      const discovered = await discoverAts(seed.name).catch(() => null);
       if (discovered) {
         await prisma.company.update({
           where: { id: company.id },
           data: { atsType: discovered.atsType, atsSlug: discovered.atsSlug },
         });
-        newlyResolved.push(seed.name);
-      } else {
-        // Mark unknown so we never re-probe — per spec, don't build scrapers for these in v1.
-        await prisma.company.update({ where: { id: company.id }, data: { atsType: "unknown" } });
+        return seed.name; // newly resolved this run
       }
+      // Mark unknown so we never re-probe — per spec, don't build scrapers for these in v1.
+      await prisma.company.update({ where: { id: company.id }, data: { atsType: "unknown" } });
     }
-  }
+    return null;
+  });
 
-  return newlyResolved;
+  return resolved.filter((n): n is string => n !== null);
 }
 
 /** GTM+US-qualifying postings for a company, best (leadership, then most recent) first. */
@@ -88,13 +104,20 @@ export async function runGtmMonitor(): Promise<MonitorRunResult> {
 
   const opportunityJobIds: string[] = [];
 
-  for (const company of targets) {
-    if (!company.atsType || !company.atsSlug || company.atsType === "unknown") continue;
-
+  // Fetch every company's postings in parallel first (the slowest, most variable external I/O),
+  // then process the results sequentially so the DB writes / embeds stay simple and ordered.
+  const fetched = await mapLimit(targets, 6, async (company) => {
+    if (!company.atsType || !company.atsSlug || company.atsType === "unknown") {
+      return { company, postings: null as NormalizedPosting[] | null };
+    }
     const postings = await fetchPostings(
       company.atsType as "greenhouse" | "lever" | "ashby",
       company.atsSlug
-    );
+    ).catch(() => null);
+    return { company, postings };
+  });
+
+  for (const { company, postings } of fetched) {
     if (!postings || postings.length === 0) continue;
 
     const ranked = rankQualifyingPostings(postings);

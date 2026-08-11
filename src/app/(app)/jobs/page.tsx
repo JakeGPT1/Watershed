@@ -8,8 +8,15 @@ import { SubmitButton } from "../_components/SubmitButton";
 
 export default async function JobsPage(props: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await props.searchParams;
+  // Only surface opportunities posted within the last month (keeps the BD list fresh). A
+  // posting with no date from its ATS is treated as live-now (the monitor only re-surfaces
+  // currently-open roles), so it isn't hidden.
+  const postedCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const allOpportunities = await prisma.job.findMany({
-    where: { isGtmOpportunity: true },
+    where: {
+      isGtmOpportunity: true,
+      OR: [{ postedAt: { gte: postedCutoff } }, { postedAt: null }],
+    },
     include: {
       company: true,
       matches: {
@@ -113,13 +120,11 @@ export default async function JobsPage(props: { searchParams: Promise<{ error?: 
                       Win → Create Project
                     </button>
                   </form>
-                  {job.matches.length > 0 && (
-                    <form action={draftBlindEmail.bind(null, job.id)}>
-                      <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
-                        Draft Blind Email
-                      </button>
-                    </form>
-                  )}
+                  <form action={draftBlindEmail.bind(null, job.id)}>
+                    <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
+                      Draft Blind Email
+                    </button>
+                  </form>
                   <form action={dismissOpportunity.bind(null, job.id)}>
                     <button className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-50">
                       Dismiss

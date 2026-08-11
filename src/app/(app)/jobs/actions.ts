@@ -13,7 +13,13 @@ import { findOrCreateCompany } from "@/lib/companies";
 
 export async function runMonitor(): Promise<void> {
   await requireOwner();
-  await runGtmMonitor();
+  // Never let a flaky job board or partial monitor failure crash the page — always fall
+  // through to a fresh render of whatever the run managed to commit.
+  try {
+    await runGtmMonitor();
+  } catch (e) {
+    console.error("runMonitor: monitor run failed (showing current data)", e);
+  }
   revalidatePath("/jobs");
   redirect("/jobs");
 }
