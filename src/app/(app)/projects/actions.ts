@@ -257,6 +257,50 @@ export async function reorderProjectCandidate(
   revalidatePath(`/projects/${projectId}`);
 }
 
+/**
+ * Move a candidate to a typed position within its stage (1-based). Unlike the arrows this
+ * SPLICES rather than swaps — typing "1" on the last candidate makes them first and shifts
+ * everyone else down, which is what typing a position implies. Out-of-range values clamp to
+ * the ends; junk input is ignored.
+ */
+export async function setProjectCandidateRank(
+  projectId: string,
+  candidateId: string,
+  formData: FormData
+) {
+  await requireOwner();
+  const requested = Number.parseInt(String(formData.get("position") ?? "").trim(), 10);
+  if (!Number.isFinite(requested)) return;
+
+  const target = await prisma.projectCandidate.findUnique({
+    where: { projectId_candidateId: { projectId, candidateId } },
+  });
+  if (!target) return;
+
+  const peers = await prisma.projectCandidate.findMany({
+    where: { projectId, stage: target.stage },
+    orderBy: [{ rank: "asc" }, { addedAt: "asc" }],
+  });
+
+  const from = peers.findIndex((p) => p.candidateId === candidateId);
+  if (from === -1) return;
+  const to = Math.max(0, Math.min(peers.length - 1, requested - 1)); // 1-based -> index, clamped
+  if (to === from) return;
+
+  const [moved] = peers.splice(from, 1);
+  peers.splice(to, 0, moved);
+
+  await prisma.$transaction(
+    peers.map((p, i) =>
+      prisma.projectCandidate.update({
+        where: { projectId_candidateId: { projectId, candidateId: p.candidateId } },
+        data: { rank: i },
+      })
+    )
+  );
+  revalidatePath(`/projects/${projectId}`);
+}
+
 export async function setProjectCandidateNote(
   projectId: string,
   candidateId: string,

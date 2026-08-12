@@ -8,6 +8,7 @@ import {
   deleteProject,
   setStage,
   reorderProjectCandidate,
+  setProjectCandidateRank,
   setProjectCandidateNote,
   removeFromProject,
   uploadJobDescription,
@@ -15,6 +16,7 @@ import {
   getJdSignedUrl,
 } from "../actions";
 import { AutoSubmitSelect } from "../_components/AutoSubmitSelect";
+import { RankInput } from "../_components/RankInput";
 import { DeleteProjectButton } from "../_components/DeleteProjectButton";
 import { ErrorBanner } from "../../_components/ErrorBanner";
 
@@ -185,7 +187,17 @@ export default async function ProjectPage(props: {
                               ▲
                             </button>
                           </form>
-                          <span className="text-xs font-medium tabular-nums text-stone-500">{i + 1}</span>
+                          <form action={setProjectCandidateRank.bind(null, id, pc.candidateId)}>
+                            <RankInput
+                              name="position"
+                              defaultValue={i + 1}
+                              min={1}
+                              max={rows.length}
+                              aria-label={`Position of ${pc.candidate.name} in ${stage}`}
+                              title="Type a position and press Enter"
+                              className="w-9 rounded border border-stone-200 bg-white px-1 py-0.5 text-center text-xs font-medium tabular-nums text-stone-600 outline-none focus:border-stone-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                          </form>
                           <form action={reorderProjectCandidate.bind(null, id, pc.candidateId, "down")}>
                             <button
                               disabled={i === rows.length - 1}
