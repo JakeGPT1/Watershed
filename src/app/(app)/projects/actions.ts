@@ -203,12 +203,58 @@ export async function setStage(projectId: string, candidateId: string, formData:
   if (!STAGES.includes(stage as (typeof STAGES)[number])) {
     failTo(`/projects/${projectId}`, "Invalid stage");
   }
+  // Land at the BOTTOM of the destination stage rather than silently jumping the queue —
+  // a freshly-moved candidate hasn't been ranked against the ones already there.
+  const last = await prisma.projectCandidate.findFirst({
+    where: { projectId, stage },
+    orderBy: { rank: "desc" },
+    select: { rank: true },
+  });
+
   await prisma.projectCandidate.update({
     where: { projectId_candidateId: { projectId, candidateId } },
-    data: { stage },
+    data: { stage, rank: (last?.rank ?? -1) + 1 },
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/candidates/${candidateId}`);
+}
+
+/**
+ * Move a candidate up or down within its stage. Ranks are normalized to a dense 0..n-1 on
+ * every reorder, which also repairs the initial all-zeros state (where order falls back to
+ * addedAt). A no-op at the edges.
+ */
+export async function reorderProjectCandidate(
+  projectId: string,
+  candidateId: string,
+  direction: "up" | "down"
+) {
+  await requireOwner();
+  const target = await prisma.projectCandidate.findUnique({
+    where: { projectId_candidateId: { projectId, candidateId } },
+  });
+  if (!target) return;
+
+  const peers = await prisma.projectCandidate.findMany({
+    where: { projectId, stage: target.stage },
+    orderBy: [{ rank: "asc" }, { addedAt: "asc" }],
+  });
+
+  const idx = peers.findIndex((p) => p.candidateId === candidateId);
+  const swapWith = direction === "up" ? idx - 1 : idx + 1;
+  if (idx === -1 || swapWith < 0 || swapWith >= peers.length) return; // already at the edge
+
+  [peers[idx], peers[swapWith]] = [peers[swapWith], peers[idx]];
+
+  await prisma.$transaction(
+    peers.map((p, i) =>
+      prisma.projectCandidate.update({
+        where: { projectId_candidateId: { projectId, candidateId: p.candidateId } },
+        data: { rank: i },
+      })
+    )
+  );
+  revalidatePath(`/projects/${projectId}`);
 }
 
 export async function setProjectCandidateNote(

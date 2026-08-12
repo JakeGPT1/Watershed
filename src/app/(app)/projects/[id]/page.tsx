@@ -7,6 +7,7 @@ import {
   updateProjectStatus,
   deleteProject,
   setStage,
+  reorderProjectCandidate,
   setProjectCandidateNote,
   removeFromProject,
   uploadJobDescription,
@@ -32,6 +33,7 @@ export default async function ProjectPage(props: {
       company: true,
       candidates: {
         include: { candidate: { include: { tags: { include: { tag: true }, take: 4 } } } },
+        orderBy: [{ rank: "asc" }, { addedAt: "asc" }],
       },
     },
   });
@@ -169,9 +171,31 @@ export default async function ProjectPage(props: {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {rows.map((pc) => (
+                  {rows.map((pc, i) => (
                     <div key={pc.candidateId} className="rounded-xl border border-stone-200 bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
+                        {/* Manual rank within this stage — #1 is who you'd present first. */}
+                        <div className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                          <form action={reorderProjectCandidate.bind(null, id, pc.candidateId, "up")}>
+                            <button
+                              disabled={i === 0}
+                              title="Move up"
+                              className="block leading-none text-stone-400 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-25"
+                            >
+                              ▲
+                            </button>
+                          </form>
+                          <span className="text-xs font-medium tabular-nums text-stone-500">{i + 1}</span>
+                          <form action={reorderProjectCandidate.bind(null, id, pc.candidateId, "down")}>
+                            <button
+                              disabled={i === rows.length - 1}
+                              title="Move down"
+                              className="block leading-none text-stone-400 hover:text-stone-900 disabled:cursor-not-allowed disabled:opacity-25"
+                            >
+                              ▼
+                            </button>
+                          </form>
+                        </div>
                         <div className="min-w-0 flex-1">
                           <Link
                             href={`/candidates/${pc.candidateId}`}

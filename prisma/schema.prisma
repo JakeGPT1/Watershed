@@ -46,6 +46,7 @@ model ProjectCandidate {
   projectId   String
   candidateId String
   stage       String    @default("Pursuing")
+  rank        Int       @default(0) // manual order within a stage; normalized 0..n-1 on reorder
   note        String?
   addedAt     DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
