@@ -12,6 +12,15 @@ export async function createCompany(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) failTo("/companies/new", "Name is required");
 
+  // A unique index on lower(name) now rejects duplicates at the DB level — surface a
+  // friendly message (with a pointer to the existing row) instead of a raw 500.
+  const existing = await prisma.company.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
+  if (existing) {
+    redirect(`/companies/${existing.id}?error=${encodeURIComponent(`"${existing.name}" already exists — you're on its page now.`)}`);
+  }
+
   const company = await prisma.company.create({
     data: {
       name,
@@ -27,6 +36,12 @@ export async function updateCompany(companyId: string, formData: FormData) {
   await requireOwner();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) failTo(`/companies/${companyId}`, "Name is required");
+
+  // Renaming onto another company's name would violate the lower(name) unique index.
+  const clash = await prisma.company.findFirst({
+    where: { name: { equals: name, mode: "insensitive" }, NOT: { id: companyId } },
+  });
+  if (clash) failTo(`/companies/${companyId}`, `Another company named "${clash.name}" already exists.`);
 
   const existing = await prisma.company.findUniqueOrThrow({ where: { id: companyId } });
   const fundingStage = String(formData.get("fundingStage") ?? "").trim() || null;

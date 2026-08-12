@@ -95,7 +95,18 @@ export async function findOrCreateCompany(rawName: string): Promise<Company> {
     );
   }
 
-  return prisma.company.create({ data: { name } });
+  // Race-safe create: a unique index on lower(name) backstops concurrent callers (two
+  // simultaneous monitor runs once created "Gong" twice). If another request won the race
+  // between our lookup and this create, the DB rejects ours — return the winner's row.
+  try {
+    return await prisma.company.create({ data: { name } });
+  } catch (e) {
+    const winner = await prisma.company.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+    });
+    if (winner) return winner;
+    throw e;
+  }
 }
 
 /**

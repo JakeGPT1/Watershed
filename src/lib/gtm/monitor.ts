@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { embed } from "@/lib/embedding";
 import { matchCandidatesToJob } from "@/lib/matching";
+import { findOrCreateCompany } from "@/lib/companies";
 import { GTM_SEED_COMPANIES } from "./companies";
 import { discoverAts } from "./discover";
 import { fetchPostings, type NormalizedPosting } from "./fetchPostings";
@@ -32,20 +33,14 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 /** Ensure every seed company exists as a GTM-target Company row, resolving unknown ATS slugs. */
 async function ensureCompaniesResolved(): Promise<string[]> {
   // Parallelize discovery — probing ATS slugs for a large seed list one-at-a-time is the
-  // biggest first-run cost. Each seed is independent (distinct name), so this is race-free.
+  // biggest first-run cost. Find-or-create goes through the SHARED helper (case-insensitive
+  // + fuzzy dedupe + race-safe create backed by the unique lower(name) index) — this loop's
+  // old private findFirst/create raced against overlapping monitor runs and created
+  // duplicate rows for brand-new seed companies.
   const resolved = await mapLimit(GTM_SEED_COMPANIES, 6, async (seed) => {
-    let company = await prisma.company.findFirst({ where: { name: seed.name } });
+    let company = await findOrCreateCompany(seed.name);
 
-    if (!company) {
-      company = await prisma.company.create({
-        data: {
-          name: seed.name,
-          isGtmTarget: true,
-          atsType: seed.atsType ?? null,
-          atsSlug: seed.atsSlug ?? null,
-        },
-      });
-    } else if (!company.isGtmTarget) {
+    if (!company.isGtmTarget || (!company.atsType && (seed.atsType || seed.atsSlug))) {
       company = await prisma.company.update({
         where: { id: company.id },
         data: { isGtmTarget: true, atsType: company.atsType ?? seed.atsType ?? null, atsSlug: company.atsSlug ?? seed.atsSlug ?? null },
