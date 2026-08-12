@@ -3,6 +3,7 @@ import { findOrCreateCompany } from "@/lib/companies";
 import { suggestGtmCompanies } from "@/lib/ai";
 import { discoverAts } from "./discover";
 import { mapLimit } from "./monitor";
+import { isLikelyIcpCompany } from "./icpFilter";
 
 // Weekly self-improvement pass for the GTM monitor. Two goals: cover MORE companies, and
 // rank them BETTER using the owner's own win/dismiss signals. Runs on the Monday cron only.
@@ -25,19 +26,33 @@ const MAX_SUGGESTED_PER_WEEK = 10;
  * resumes, client companies from website intake — into the monitored set. Pre-qualified by
  * reality: they employ GTM talent or asked us for a search. Cost: pure HTTP probes, $0.
  */
-async function promoteExistingCompanies(): Promise<number> {
+async function promoteExistingCompanies(): Promise<{ promoted: number; skipped: number }> {
   const currentTargets = await prisma.company.count({ where: { isGtmTarget: true } });
   const room = Math.min(MAX_NEW_TARGETS_PER_WEEK, MAX_TOTAL_TARGETS - currentTargets);
-  if (room <= 0) return 0;
+  if (room <= 0) return { promoted: 0, skipped: 0 };
 
-  // Newest first — most recently encountered companies are the most relevant.
-  const candidates = await prisma.company.findMany({
+  // Over-fetch, then ICP-filter, then take `room` survivors — otherwise a batch of junk
+  // (consultancies, parse artifacts) would consume the whole weekly quota and starve real
+  // candidates behind it.
+  const pool = await prisma.company.findMany({
     where: { isGtmTarget: false },
     orderBy: { createdAt: "desc" },
-    take: room,
+    take: room * 5,
   });
 
-  const results = await mapLimit(candidates, 4, async (c) => {
+  const eligible: typeof pool = [];
+  let skipped = 0;
+  for (const c of pool) {
+    const verdict = isLikelyIcpCompany(c.name, c.fundingStage);
+    if (!verdict.ok) {
+      console.log(`audit: skipping "${c.name}" — ${verdict.reason}`);
+      skipped++;
+      continue;
+    }
+    if (eligible.length < room) eligible.push(c);
+  }
+
+  const results = await mapLimit(eligible, 4, async (c) => {
     const found = await discoverAts(c.name).catch(() => null);
     await prisma.company.update({
       where: { id: c.id },
@@ -49,7 +64,7 @@ async function promoteExistingCompanies(): Promise<number> {
     });
     return found ? 1 : 0;
   });
-  return results.reduce<number>((a, b) => a + b, 0);
+  return { promoted: results.reduce<number>((a, b) => a + b, 0), skipped };
 }
 
 /**
@@ -72,6 +87,13 @@ async function suggestNewCompanies(): Promise<number> {
   for (const raw of names.slice(0, MAX_SUGGESTED_PER_WEEK)) {
     const name = raw.trim();
     if (!name) continue;
+    // Same ICP gate as Layer 1 — the model can suggest a consultancy or staffing firm.
+    // Check BEFORE findOrCreateCompany so a rejected suggestion doesn't create a row at all.
+    const verdict = isLikelyIcpCompany(name);
+    if (!verdict.ok) {
+      console.log(`audit: skipping suggestion "${name}" — ${verdict.reason}`);
+      continue;
+    }
     // Route through the shared fuzzy dedupe so "Vanta"/"Vanta Inc" don't split.
     const company = await findOrCreateCompany(name);
     if (company.isGtmTarget) continue; // already monitored
@@ -115,10 +137,11 @@ export async function runWeeklyAudit(): Promise<void> {
   const recovered = recoveries.reduce<number>((a, b) => a + b, 0);
 
   // (2) NEW-COMPANY DISCOVERY — free pipeline harvest first, then the capped AI suggestion.
-  const promotedFromDb = await promoteExistingCompanies().catch((e) => {
+  const promotion = await promoteExistingCompanies().catch((e) => {
     console.error("audit: promoteExistingCompanies failed", e);
-    return 0;
+    return { promoted: 0, skipped: 0 };
   });
+  const promotedFromDb = promotion.promoted;
   const suggestedAdded = await suggestNewCompanies().catch((e) => {
     console.error("audit: suggestNewCompanies failed", e);
     return 0;
@@ -176,8 +199,9 @@ export async function runWeeklyAudit(): Promise<void> {
       winsLastWeek: wonProjects.length,
       dismissalsLastWeek: dismissed.length,
       notes:
-        `Recovered ${recovered} ATS; promoted ${promotedFromDb} from pipeline; ` +
-        `added ${suggestedAdded} suggested; adjusted ${delta.size} companies' icpBoost ` +
+        `Recovered ${recovered} ATS; promoted ${promotedFromDb} from pipeline ` +
+        `(${promotion.skipped} skipped as non-ICP); added ${suggestedAdded} suggested; ` +
+        `adjusted ${delta.size} companies' icpBoost ` +
         `(${wonProjects.length} wins, ${dismissed.length} dismissals).`,
     },
   });
