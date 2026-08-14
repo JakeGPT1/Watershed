@@ -97,6 +97,13 @@ export default async function ProjectPage(props: {
           >
             Add Candidates
           </Link>
+          <Link
+            href={`/projects/${id}/report`}
+            target="_blank"
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50"
+          >
+            Generate Report
+          </Link>
           <DeleteProjectButton action={deleteProject.bind(null, id)} name={project.title} />
         </div>
       </div>

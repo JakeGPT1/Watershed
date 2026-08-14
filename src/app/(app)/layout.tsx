@@ -26,7 +26,7 @@ const NAV = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-stone-50">
-      <aside className="fixed inset-y-0 w-52 border-r border-stone-200 bg-white p-4">
+      <aside className="fixed inset-y-0 w-52 border-r border-stone-200 bg-white p-4 print:hidden">
         <div className="mb-6 px-2 text-lg font-semibold text-stone-900">Watershed</div>
         <nav className="space-y-1">
           {NAV.map((item) => (
@@ -45,7 +45,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </form>
       </aside>
-      <main className="ml-52 flex-1 p-8">{children}</main>
+      <main className="ml-52 flex-1 p-8 print:ml-0 print:p-0">{children}</main>
     </div>
   );
 }
