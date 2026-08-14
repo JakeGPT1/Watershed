@@ -10,6 +10,26 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const longDate = (d: Date) =>
   d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
+/**
+ * Stage-accurate status line. Pursuing (and Not Interested — where the ownership record is
+ * the point) date from when the candidate was saved to the project; every later stage dates
+ * from when they ENTERED that stage (stageChangedAt, stamped only by stage moves).
+ */
+function statusLine(pc: { stage: string; addedAt: Date; stageChangedAt: Date }): string {
+  switch (pc.stage) {
+    case "Scheduling":
+      return `Interview Scheduling as of ${longDate(pc.stageChangedAt)}`;
+    case "Screen":
+      return `Watershed Interviewed on ${longDate(pc.stageChangedAt)}`;
+    case "Hiring Interview":
+      return `Client Interviewed on ${longDate(pc.stageChangedAt)}`;
+    case "Offer":
+      return `Offer Extended on ${longDate(pc.stageChangedAt)}`;
+    default: // Pursuing, Not Interested
+      return `Saved to Project on ${longDate(pc.addedAt)}`;
+  }
+}
+
 export default async function ProjectReportPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
 
@@ -128,9 +148,7 @@ export default async function ProjectReportPage(props: { params: Promise<{ id: s
                           </div>
                         </div>
                         {pc.note && <p className="mt-2 text-sm text-stone-700">{pc.note}</p>}
-                        <p className="mt-2 text-xs text-stone-400">
-                          Presented by Watershed on {longDate(pc.addedAt)}
-                        </p>
+                        <p className="mt-2 text-xs text-stone-400">{statusLine(pc)}</p>
                       </div>
                     );
                   })}

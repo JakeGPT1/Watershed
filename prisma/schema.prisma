@@ -43,11 +43,12 @@ model Project {
 }
 
 model ProjectCandidate {
-  projectId   String
-  candidateId String
-  stage       String    @default("Pursuing")
-  rank        Int       @default(0) // manual order within a stage; normalized 0..n-1 on reorder
-  note        String?
+  projectId      String
+  candidateId    String
+  stage          String   @default("Pursuing")
+  rank           Int      @default(0) // manual order within a stage; normalized 0..n-1 on reorder
+  stageChangedAt DateTime @default(now()) // set ONLY by stage moves (not rank/note edits) — feeds the client report's per-stage dates
+  note           String?
   addedAt     DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   project     Project   @relation(fields: [projectId], references: [id])

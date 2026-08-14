@@ -213,7 +213,7 @@ export async function setStage(projectId: string, candidateId: string, formData:
 
   await prisma.projectCandidate.update({
     where: { projectId_candidateId: { projectId, candidateId } },
-    data: { stage, rank: (last?.rank ?? -1) + 1 },
+    data: { stage, rank: (last?.rank ?? -1) + 1, stageChangedAt: new Date() },
   });
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/candidates/${candidateId}`);
