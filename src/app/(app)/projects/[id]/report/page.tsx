@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { STAGES } from "@/lib/stages";
 import { PrintButton } from "../../_components/PrintButton";
 
-const CONTACT_EMAIL = "jake.braunscheidel@gmail.com";
+const CONTACT_EMAIL = "Jake@WatershedGTM.com";
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const longDate = (d: Date) =>
