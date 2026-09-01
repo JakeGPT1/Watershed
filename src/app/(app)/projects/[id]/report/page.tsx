@@ -23,6 +23,8 @@ function statusLine(pc: { stage: string; addedAt: Date; stageChangedAt: Date }):
       return `Watershed Interviewed on ${longDate(pc.stageChangedAt)}`;
     case "Hiring Interview":
       return `Client Interviewed on ${longDate(pc.stageChangedAt)}`;
+    case "Case":
+      return `Case Study as of ${longDate(pc.stageChangedAt)}`;
     case "Offer":
       return `Offer Extended on ${longDate(pc.stageChangedAt)}`;
     default: // Pursuing, Not Interested, Disqualified

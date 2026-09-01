@@ -4,6 +4,7 @@ export const STAGES = [
   "Scheduling",
   "Screen",
   "Hiring Interview",
+  "Case",
   "Offer",
   "Not Interested",
   "Disqualified",
