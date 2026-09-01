@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { STAGES } from "@/lib/stages";
+import { STAGES, INACTIVE_STAGES, isInactiveStage } from "@/lib/stages";
 import {
   renameProject,
   updateProjectStatus,
@@ -167,7 +167,7 @@ export default async function ProjectPage(props: {
         {STAGES.map((stage) => {
           const rows = byStage.get(stage) ?? [];
           if (rows.length === 0 && stage !== "Pursuing") return null;
-          const muted = stage === "Not Interested";
+          const muted = isInactiveStage(stage);
 
           return (
             <div key={stage} className={muted ? "opacity-60" : undefined}>

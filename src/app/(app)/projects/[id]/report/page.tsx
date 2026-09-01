@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { STAGES } from "@/lib/stages";
+import { STAGES, INACTIVE_STAGES, isInactiveStage } from "@/lib/stages";
 import { PrintButton } from "../../_components/PrintButton";
 
 const CONTACT_EMAIL = "Jake@WatershedGTM.com";
@@ -11,7 +11,7 @@ const longDate = (d: Date) =>
   d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
 /**
- * Stage-accurate status line. Pursuing (and Not Interested — where the ownership record is
+ * Stage-accurate status line. Pursuing (and the terminal stages — where the ownership record is
  * the point) date from when the candidate was saved to the project; every later stage dates
  * from when they ENTERED that stage (stageChangedAt, stamped only by stage moves).
  */
@@ -25,7 +25,7 @@ function statusLine(pc: { stage: string; addedAt: Date; stageChangedAt: Date }):
       return `Client Interviewed on ${longDate(pc.stageChangedAt)}`;
     case "Offer":
       return `Offer Extended on ${longDate(pc.stageChangedAt)}`;
-    default: // Pursuing, Not Interested
+    default: // Pursuing, Not Interested, Disqualified
       return `Saved to Project on ${longDate(pc.addedAt)}`;
   }
 }
@@ -51,7 +51,7 @@ export default async function ProjectReportPage(props: { params: Promise<{ id: s
     (byStage.get(pc.stage) ?? byStage.get("Pursuing")!).push(pc);
   }
 
-  const activeStages = STAGES.filter((s) => s !== "Not Interested");
+  const activeStages = STAGES.filter((s) => !isInactiveStage(s));
   const now = Date.now();
   const clientName = project.company?.name ?? "the client";
 
@@ -109,15 +109,15 @@ export default async function ProjectReportPage(props: { params: Promise<{ id: s
 
         {/* Stage sections */}
         <div className="space-y-8">
-          {[...activeStages, "Not Interested" as const].map((stage) => {
+          {[...activeStages, ...INACTIVE_STAGES].map((stage) => {
             const rows = byStage.get(stage) ?? [];
             if (rows.length === 0) return null;
-            const muted = stage === "Not Interested";
+            const muted = isInactiveStage(stage);
 
             return (
               <div key={stage} className={muted ? "opacity-60" : undefined}>
                 <h2 className="mb-3 break-inside-avoid text-sm font-medium uppercase tracking-wide text-stone-500">
-                  {muted ? "No Longer in Process" : stage} <span className="text-stone-400">· {rows.length}</span>
+                  {stage === "Not Interested" ? "No Longer in Process" : stage} <span className="text-stone-400">· {rows.length}</span>
                 </h2>
                 <div className="space-y-3">
                   {rows.map((pc, i) => {
