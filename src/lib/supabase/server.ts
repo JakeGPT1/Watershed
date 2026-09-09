@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { isOwnerEmail } from "@/lib/owner";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -32,7 +33,7 @@ export async function requireOwner() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user?.email || user.email.toLowerCase() !== process.env.OWNER_EMAIL!.toLowerCase()) {
+  if (!isOwnerEmail(user?.email)) {
     throw new Error("Unauthorized");
   }
   return user;

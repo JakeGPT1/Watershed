@@ -2,12 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { isOwnerEmail } from "@/lib/owner";
 
 export async function sendMagicLink(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
 
   // Owner-only lockdown: never even send a link to any other address.
-  if (email !== process.env.OWNER_EMAIL!.toLowerCase()) {
+  if (!isOwnerEmail(email)) {
     redirect(`/login?error=${encodeURIComponent("This app is private.")}`);
   }
 

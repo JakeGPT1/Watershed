@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isOwnerEmail } from "@/lib/owner";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 // Cron endpoints have no Supabase session — they authenticate via CRON_SECRET
@@ -40,9 +41,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isPublic = PUBLIC_PATHS.some((p) => request.nextUrl.pathname.startsWith(p));
-  const isOwner =
-    !!user?.email &&
-    user.email.toLowerCase() === process.env.OWNER_EMAIL!.toLowerCase();
+  const isOwner = isOwnerEmail(user?.email);
 
   if (!isPublic && !isOwner) {
     // Signed-in non-owner: kill the session. Anonymous: send to login.
