@@ -49,7 +49,7 @@ export default async function LoginPage(props: {
               required
               inputMode="numeric"
               autoComplete="one-time-code"
-              placeholder="6-digit code"
+              placeholder="sign-in code"
               className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm tracking-widest outline-none focus:border-stone-500"
             />
             <button className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">
